@@ -33,10 +33,8 @@ class ManifestSupplyChain {
 		mlist.id = 'mlist-'+id; mlist.classList.add('mlist');
 	
 		document.getElementById('manifestlist').append(mheader,mdetails,mlist);	
-		
 		document.getElementById('mheader-'+id).addEventListener('click', (e, nodeid=id) => { MI.Interface.ShowHeader(nodeid); });
 		document.getElementById('closemap-'+id).addEventListener('click', (e, nodeid=id) => { MI.Supplychain.Remove(nodeid); });
-	
 		document.querySelectorAll('#datalayers input').forEach(el => { el.addEventListener('click', (e) => { 
 			if (el.checked) { MI.Atlas.map.addLayer(MI.Atlas.layerdefs[el.value]); } 
 			else { MI.Atlas.map.removeLayer(MI.Atlas.layerdefs[el.value]); } }); 
@@ -231,7 +229,7 @@ class ManifestSupplyChain {
 	}
 	
 	SetupPoint(ft, d, index) {
-		let setup = { index: index, type: 'node', style: JSON.parse(JSON.stringify(d.details.style)), basestyle: JSON.parse(JSON.stringify(d.details.style)), latlng: new L.LatLng(ft.geometry.coordinates[1], ft.geometry.coordinates[0]), measures: this.SetupMeasures(ft, d.details)};
+		let setup = { index: index, type: 'node', style: JSON.parse(JSON.stringify(d.details.style)), basestyle: JSON.parse(JSON.stringify(d.details.style)), latlng: new L.LatLng(ft.geometry.coordinates[1], ft.geometry.coordinates[0]), measures: this.SetupMeasures(ft, d.details)}; //, time: this.SetupTimeSlider(this.times)
 		
 		// Individual point color
 		if ( ft.properties.color ) { 
@@ -383,41 +381,58 @@ class ManifestSupplyChain {
 			style: Object.assign(MI.Atlas.styles.arrow, {color: d.details.style.darkColor, fillColor: d.details.style.color}),
 			basestyle: Object.assign(MI.Atlas.styles.arrow, {color: d.details.style.darkColor, fillColor: d.details.style.color}) });
 		return arrow;
-	}	
+	}
+
+
 	SetupMeasures(ft, sc) {
 		let measure = ft.properties.measures, measure_list = Object.assign([], this.measures), measurecheck = false, smapmeasures = [];
 		for (let e in ft.properties.measures) {
+			if (MI && MI.supplychains && MI.supplychains[e] && MI.supplychains[0].mapper && MI.supplychains[e].mapper[0] && MI.supplychains[e].mapper[0].properties && MI.supplychains[e].mapper[0].properties.measures && MI.supplychains[e].mapper[0].properties.measures[0] && MI.supplychains[e].mapper[0].properties.measures[0].startTime) {
+				document.getElementById('timeCapture').style.display = 'block';
+			}
 			if (ft.properties.measures[e].mtype !== '') {
 				let ftmeasure = ft.properties.measures[e], measurecheck = false;
-			
-				for (let l in measure_list) { if (l.measure === ftmeasure.mtype) { measurecheck = true; } }
+				for (let l in measure_list) {
+					if (l.measure === ftmeasure.mtype) { measurecheck = true; }
+				}
 				if (measurecheck === false) { measure_list.push({measure: ftmeasure.mtype, unit: ftmeasure.munit}); }
-				if (ftmeasure.mtype === 'length') {ftmeasure.mtype = "Length"; }
+				if (ftmeasure.mtype === 'length') {ftmeasure.mtype = "Length";}
 				if (typeof sc.measures[ftmeasure.mtype] === 'undefined') { sc.measures[ftmeasure.mtype] = {max: 1, min: 0}; }
 				let mmax = Number(sc.measures[ftmeasure.mtype].max) > Number(ftmeasure.mvalue) ? Number(sc.measures[ftmeasure.mtype].max) : Number(ftmeasure.mvalue);
 				sc.measures[ftmeasure.mtype] = { max: mmax, min: 0 };
-			} 
+			}
 		}
-	
-		for (let l in measure_list) {		
-			if (typeof ft.properties[measure_list[l].measure] !== 'undefined') { 
+
+		for (let l in measure_list) {
+			if (typeof ft.properties[measure_list[l].measure] !== 'undefined') {
 				if (typeof sc.measures[measure_list[l].measure] === 'undefined') { sc.measures[measure_list[l].measure] = {max: 1, min: 0}; }
 				sc.measures[measure_list[l].measure] = { max: Number(sc.measures[measure_list[l].measure].max) + Number(ft.properties[measure_list[l].measure]), min: 0 };
-	
-				measure[measure_list[l].measure] = ft.properties[measure_list[l].measure]; 
+				measure[measure_list[l].measure] = ft.properties[measure_list[l].measure];
 				smapmeasures.push({mtype: measure_list[l].measure, munit: measure_list[l].unit, mvalue: ft.properties[measure_list[l].measure]});
 			}
-		}		
+		}
 		return smapmeasures.length > 0 ? smapmeasures : (Object.entries(ft.properties.measures).length === 0 ? [] : ft.properties.measures);
 	}
-	
+
+
+
 	/** Removes a supply chain from the interface (along with its data) **/
 	Remove(id) {
 		event.stopPropagation();
-
 		let offset = document.getElementById('mheader-'+id).offsetHeight;
 		let targetid = 0;
-	
+
+		// Remove the contents of the time slider container
+		const timeSliderContainer = document.getElementById('timeSlider');
+		if (timeSliderContainer) {
+			timeSliderContainer.innerHTML = '';
+			this.sw = !this.sw
+		}
+
+		// Removes the timeSlider button
+		document.getElementById('timeCapture').style.display = 'none';
+
+
 		if (MI.supplychains.length > 1) {
 			let prev = document.getElementById('mheader-'+id).previousElementSibling;
 			while (prev) { if (prev.classList.contains('mheader')) { offset += prev.offsetHeight; } prev = prev.previousElementSibling; }
