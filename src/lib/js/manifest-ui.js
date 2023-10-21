@@ -2,16 +2,105 @@ class ManifestUI {
 	constructor() { 
 		this.interval = null;
 		this.filter = {clear: true, term: null};
+		this.sw = false;
 		
-		document.getElementById('fullscreen-menu').addEventListener('click', (e) => { MI.Interface.ToggleFullscreen(); });
+		document.getElementById('fullscreen-menu').addEventListener('click', (e) => { MI.Interface.ToggleFullscreen() }); //MI.Interface.ToggleFullscreen();
 		document.getElementById('mapcapture').addEventListener('click', (e) => { MI.ExportManifest(null, document.title, 'map'); });
 		document.querySelectorAll('#minfo, #minfo-hamburger').forEach(el => { el.addEventListener('click', (e) => { MI.Interface.ShowLauncher(); }); });
-	
+		document.getElementById('timeCapture').addEventListener('click', (e) => {this.SetupTimeSlider()})
 		// CHECK used to also assign mouseup to first below
 		document.getElementById('searchbar').addEventListener('keyup', (e) => { MI.Interface.Search(); });
 		document.getElementById('searchclear').addEventListener('click', (e) => { MI.Interface.ClearSearch(); MI.Interface.Search(); });	
 	}
-	
+
+
+	SetupTimeSlider() {
+
+		if (MI.supplychains[0].mapper[0].properties.measures[0].startTime !== undefined &&this.sw === false) {
+			this.sw = !this.sw
+			// sets values to first element in object
+			let tmin = MI.supplychains[0].mapper[0].properties.measures[0].startTime;
+			let tmax = MI.supplychains[0].mapper[0].properties.measures[0].endTime;
+
+			// finds the min and max time for timeSlider widget
+			for (let n in MI.supplychains) {
+				if (MI.supplychains[n].mapper[0].properties.measures[0] !== undefined) {
+					for (let i in MI.supplychains[0].mapper) {
+						if (MI.supplychains[n].mapper[i].properties.measures[0] !== undefined) {
+							// Gets the lowest and highest points
+							if (MI.supplychains[n].mapper[i].properties.measures[0].startTime < tmin) {tmin = MI.supplychains[n].mapper[i].properties.measures[0].startTime;}
+							if (MI.supplychains[n].mapper[i].properties.measures[0].endTime > tmax) {tmax = MI.supplychains[n].mapper[i].properties.measures[0].endTime;}
+						}
+					}
+				}
+			}
+
+			require(["esri/widgets/TimeSlider"
+			], (TimeSlider) => {
+				let unixStartTime = tmin;
+				let unixEndTime = tmax;
+				let timeIncrement = (tmax - tmin) / 150000000
+
+				const timeSlider = new TimeSlider({
+					container: "timeSlider",
+					timeVisible: true,
+					loop: true
+				});
+				timeSlider.fullTimeExtent = {
+					start: new Date(unixStartTime * 1000),
+					end: new Date(unixEndTime * 1000)
+				};
+				timeSlider.stops = {
+					interval: {
+						value: timeIncrement,
+						unit: "minutes"
+					}
+				};
+				timeSlider.watch("timeExtent", (timeExtent) => {
+					const currentTimeInSeconds = timeExtent.end.getTime() / 1000;
+
+					// Loop through the layers and hide/show them based on their start and end times
+					for (let i in MI.Atlas.map._layers) {
+						let layer = MI.Atlas.map._layers[i];
+
+						if (typeof layer.feature !== 'undefined' && layer.feature.properties.measures.length !== 0) {
+							let startTime = layer.feature.properties.measures[0].startTime;
+							let endTime = layer.feature.properties.measures[0].endTime;
+
+							// Check if the current time is within the layer's time range
+							if (currentTimeInSeconds >= startTime && currentTimeInSeconds <= endTime) {
+								layer.feature.properties.hidden = false; // Show the layer
+								layer.openPopup()
+							} else {
+								layer.feature.properties.hidden = true; // Hide the layer
+								layer.closePopup()
+
+							}
+						}
+					}
+					if (this.sw === false) {
+						timeSlider.stop();
+					}
+
+					MI.Atlas.Refresh();
+				});
+			});
+		}
+
+		else if (this.sw === true) {
+			const timeSliderContainer = document.getElementById('timeSlider');
+
+			if (timeSliderContainer) {
+				timeSliderContainer.innerHTML = '';
+			}
+			this.sw = !this.sw
+		}
+	}
+
+
+
+
+
 	/** Called after Manifest has been initialized and the first supply chain loaded **/ 
 	CleanupInterface() { 	
 		MI.initialized = true; console.log(MI); 
@@ -23,7 +112,7 @@ class ManifestUI {
 			else { document.getElementById('loadlistpanel').className = ''; }
 		});
 				
-		document.getElementById('load-samples-btn').addEventListener('click', (e) => { MI.Interface.LoadFromLauncher(document.getElementById('load-samples').value); });	
+		document.getElementById('load-samples-btn').addEventListener('click', (e) => { MI.Interface.LoadFromLauncher(document.getElementById('load-samples').value);});
 		document.querySelectorAll('#basemap-chooser li').forEach(el => { el.addEventListener('click', (e) => { this.SetBasemap(el.classList[0]); }); });
 		document.getElementById('viz-choices').addEventListener('change', (e) => { MI.Visualization.Set(document.getElementById('viz-choices').value); });
 		document.querySelectorAll('.sources').forEach(el => { el.addEventListener('click', (e) => { e.stopPropagation(); }); });
@@ -123,7 +212,7 @@ class ManifestUI {
 			type = option[0];	
 			option = [option.shift(), option.join('-')];
 			id = option[1];
-		
+
 			if (type === 'smap') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; } 
 			else if	(type === 'manifest') { loadurl = id; id = id.hashCode(); } 
 			else if (type === 'gsheet') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; idref = id; id = id.hashCode(); }	
@@ -137,10 +226,12 @@ class ManifestUI {
 			//$.getJSON(loadurl, function(d) { });				
 			if (close) { MI.Interface.ShowLauncher(); }
 		} else { this.ShakeAlert(document.getElementById('manifestbar')); }
+
+
 	}
 	
 	/** A simple text match search **/
-	Search(term) {
+	Search() {
 		if (term) { document.getElementById('searchbar').value = term; }
 		let s = document.getElementById('searchbar').value.toLowerCase();
 		
