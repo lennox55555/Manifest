@@ -39,7 +39,6 @@ class ManifestUI {
 			], (TimeSlider) => {
 				let unixStartTime = tmin;
 				let unixEndTime = tmax;
-				let timeIncrement = (tmax - tmin) / 150000000
 
 				const timeSlider = new TimeSlider({
 					container: "timeSlider",
@@ -51,15 +50,13 @@ class ManifestUI {
 					end: new Date(unixEndTime * 1000)
 				};
 				timeSlider.stops = {
-					interval: {
-						value: timeIncrement,
-						unit: "minutes"
-					}
+					count: 15
 				};
 				timeSlider.watch("timeExtent", (timeExtent) => {
-					const currentTimeInSeconds = timeExtent.end.getTime() / 1000;
-
+					const currentTimeInSeconds = (timeExtent.start.getTime() + timeExtent.end.getTime()) / 2000;
+					console.log(currentTimeInSeconds)
 					// Loop through the layers and hide/show them based on their start and end times
+
 					for (let i in MI.Atlas.map._layers) {
 						let layer = MI.Atlas.map._layers[i];
 
@@ -81,7 +78,6 @@ class ManifestUI {
 					if (this.sw === false) {
 						timeSlider.stop();
 					}
-
 					MI.Atlas.Refresh();
 				});
 			});
