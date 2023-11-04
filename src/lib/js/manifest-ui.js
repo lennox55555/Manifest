@@ -14,27 +14,25 @@ class ManifestUI {
 	}
 
 
-	SetupTimeSlider() {
-
-		if (MI.supplychains[0].mapper[0].properties.measures[0].startTime !== undefined &&this.sw === false) {
+		SetupTimeSlider() {
+		if (this.sw === false) {
 			this.sw = !this.sw
 			// sets values to first element in object
-			let tmin = MI.supplychains[0].mapper[0].properties.measures[0].startTime;
-			let tmax = MI.supplychains[0].mapper[0].properties.measures[0].endTime;
+			let tmin = null;
+			let tmax = null;
 
 			// finds the min and max time for timeSlider widget
 			for (let n in MI.supplychains) {
-				if (MI.supplychains[n].mapper[0].properties.measures[0] !== undefined) {
-					for (let i in MI.supplychains[0].mapper) {
-						if (MI.supplychains[n].mapper[i].properties.measures[0] !== undefined) {
-							// Gets the lowest and highest points
-							if (MI.supplychains[n].mapper[i].properties.measures[0].startTime < tmin) {tmin = MI.supplychains[n].mapper[i].properties.measures[0].startTime;}
-							if (MI.supplychains[n].mapper[i].properties.measures[0].endTime > tmax) {tmax = MI.supplychains[n].mapper[i].properties.measures[0].endTime;}
-						}
+				console.log(MI.supplychains[n])
+				for (let i in MI.supplychains[n].graph.nodes) {
+					if (MI.supplychains[n].features[i].properties.measures[0] !== undefined) {
+						// Gets the lowest and highest points
+						if (tmin === null) {tmin = MI.supplychains[n].features[i].properties.measures[0].startTime;}
+						if (MI.supplychains[n].features[i].properties.measures[0].startTime < tmin) {tmin = MI.supplychains[n].features[i].properties.measures[0].startTime;}
+						if (MI.supplychains[n].features[i].properties.measures[0].endTime > tmax) {tmax = MI.supplychains[n].features[i].properties.measures[0].endTime;}
 					}
 				}
 			}
-
 			require(["esri/widgets/TimeSlider"
 			], (TimeSlider) => {
 				let unixStartTime = tmin;
@@ -46,13 +44,15 @@ class ManifestUI {
 					loop: true
 				});
 				timeSlider.fullTimeExtent = {
-					start: new Date(unixStartTime * 1000),
-					end: new Date(unixEndTime * 1000)
+					// multiply by 1.1 to add buffer
+					start: new Date((unixStartTime * .9) * 1000),
+					end: new Date((unixEndTime *1.1 )* 1000)
 				};
 				timeSlider.stops = {
 					count: 15
 				};
 				timeSlider.watch("timeExtent", (timeExtent) => {
+					// divide by 1000 because of unix conversion & divide by 2 for average of both numbers
 					const currentTimeInSeconds = (timeExtent.start.getTime() + timeExtent.end.getTime()) / 2000;
 					console.log(currentTimeInSeconds)
 					// Loop through the layers and hide/show them based on their start and end times
@@ -71,7 +71,6 @@ class ManifestUI {
 							} else {
 								layer.feature.properties.hidden = true; // Hide the layer
 								layer.closePopup()
-
 							}
 						}
 					}
@@ -82,19 +81,14 @@ class ManifestUI {
 				});
 			});
 		}
-
 		else if (this.sw === true) {
 			const timeSliderContainer = document.getElementById('timeSlider');
-
 			if (timeSliderContainer) {
 				timeSliderContainer.innerHTML = '';
 			}
 			this.sw = !this.sw
 		}
 	}
-
-
-
 
 
 	/** Called after Manifest has been initialized and the first supply chain loaded **/ 
