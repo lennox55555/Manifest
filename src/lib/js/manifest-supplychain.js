@@ -387,9 +387,10 @@ class ManifestSupplyChain {
 	SetupMeasures(ft, sc) {
 		let measure = ft.properties.measures, measure_list = Object.assign([], this.measures), measurecheck = false, smapmeasures = [];
 		for (let e in ft.properties.measures) {
-			if (MI && MI.supplychains && MI.supplychains[e] && MI.supplychains[0].mapper && MI.supplychains[e].mapper[0] && MI.supplychains[e].mapper[0].properties && MI.supplychains[e].mapper[0].properties.measures && MI.supplychains[e].mapper[0].properties.measures[0] && MI.supplychains[e].mapper[0].properties.measures[0].startTime) {
+			if (MI && MI.supplychains && MI.supplychains[e] && MI.supplychains[e].features[0] && MI.supplychains[e].features[0].properties && MI.supplychains[e].features[0].properties.measures && MI.supplychains[e].features[0].properties.measures[0] && (MI.supplychains[e].features[0].properties.measures[0].time || MI.supplychains[e].features[0].properties.measures[0].startTime)) {
 				document.getElementById('timeCapture').style.display = 'block';
 			}
+
 			if (ft.properties.measures[e].mtype !== '') {
 				let ftmeasure = ft.properties.measures[e], measurecheck = false;
 				for (let l in measure_list) {
@@ -413,7 +414,6 @@ class ManifestSupplyChain {
 		}
 		return smapmeasures.length > 0 ? smapmeasures : (Object.entries(ft.properties.measures).length === 0 ? [] : ft.properties.measures);
 	}
-
 
 
 	/** Removes a supply chain from the interface (along with its data) **/
