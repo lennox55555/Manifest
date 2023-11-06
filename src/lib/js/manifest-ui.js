@@ -17,19 +17,20 @@ class ManifestUI {
 		SetupTimeSlider() {
 		if (this.sw === false) {
 			this.sw = !this.sw
-			// sets values to first element in object
+
 			let tmin = null;
 			let tmax = null;
 
-			// finds the min and max time for timeSlider widget
+			// determines the min and max time for timeSlider widget
 			for (let n in MI.supplychains) {
-				console.log(MI.supplychains[n])
 				for (let i in MI.supplychains[n].graph.nodes) {
-					if (MI.supplychains[n].features[i].properties.measures[0] !== undefined) {
+					let measures = MI.supplychains[n].features[i].properties.measures;
+					if (measures[0] !== undefined) {
+						let startTime = measures[0].startTime || measures[0].time;
+						let endTime = measures[0].endTime || measures[0].time;
 						// Gets the lowest and highest points
-						if (tmin === null) {tmin = MI.supplychains[n].features[i].properties.measures[0].startTime;}
-						if (MI.supplychains[n].features[i].properties.measures[0].startTime < tmin) {tmin = MI.supplychains[n].features[i].properties.measures[0].startTime;}
-						if (MI.supplychains[n].features[i].properties.measures[0].endTime > tmax) {tmax = MI.supplychains[n].features[i].properties.measures[0].endTime;}
+						if (tmin === null || startTime < tmin) { tmin = startTime; }
+						if (tmax === null || endTime > tmax) { tmax = endTime; }
 					}
 				}
 			}
@@ -49,28 +50,31 @@ class ManifestUI {
 					end: new Date((unixEndTime *1.1 )* 1000)
 				};
 				timeSlider.stops = {
-					count: 15
+					count: 20
 				};
 				timeSlider.watch("timeExtent", (timeExtent) => {
-					// divide by 1000 because of unix conversion & divide by 2 for average of both numbers
+					// division by 1000 because of unix conversion & divide by 2 for average of both numbers
 					const currentTimeInSeconds = (timeExtent.start.getTime() + timeExtent.end.getTime()) / 2000;
 					console.log(currentTimeInSeconds)
 					// Loop through the layers and hide/show them based on their start and end times
-
 					for (let i in MI.Atlas.map._layers) {
 						let layer = MI.Atlas.map._layers[i];
 
 						if (typeof layer.feature !== 'undefined' && layer.feature.properties.measures.length !== 0) {
-							let startTime = layer.feature.properties.measures[0].startTime;
-							let endTime = layer.feature.properties.measures[0].endTime;
+							let measures = layer.feature.properties.measures[0];
+							let startTime = measures.startTime || measures.time;
+							let endTime = measures.endTime || measures.time;
 
-							// Check if the current time is within the layer's time range
-							if (currentTimeInSeconds >= startTime && currentTimeInSeconds <= endTime) {
-								layer.feature.properties.hidden = false; // Show the layer
-								layer.openPopup()
+							if (currentTimeInSeconds >= startTime && currentTimeInSeconds <= endTime || currentTimeInSeconds >= measures.time) {
+								layer.feature.properties.hidden = false;
+								if (!layer.isPopupOpen()) {
+									layer.openPopup();
+								}
 							} else {
-								layer.feature.properties.hidden = true; // Hide the layer
-								layer.closePopup()
+								layer.feature.properties.hidden = true;
+								if (layer.isPopupOpen()) {
+									layer.closePopup();
+								}
 							}
 						}
 					}
