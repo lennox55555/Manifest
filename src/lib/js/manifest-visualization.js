@@ -4,6 +4,7 @@ class ManifestVisualization {
 		this.last_active = null;
 		this.interval = 0;
 		this.listview = null;
+		this.manifestSupplyChain = new ManifestSupplyChain();
 	}
 	
 	Set(type, refresh=true) {
@@ -23,6 +24,8 @@ class ManifestVisualization {
 	}
 	
 	MapViz() {
+		this.manifestSupplyChain.CheckTemporalData();
+
 		document.querySelectorAll('#vizwrap, #textview, #listview').forEach(el => { el.classList.add('closed'); });
 		MI.Atlas.DisplayLayers(true);
 		document.querySelectorAll('.viz, #vizshell defs').forEach(el => { el.remove(); });
@@ -32,6 +35,8 @@ class ManifestVisualization {
 	}
 	
 	Graph(refresh, type) {
+		this.manifestSupplyChain.CheckTemporalData();
+
 		document.querySelectorAll('#vizwrap, #listview, #textview').forEach(el => { el.classList.add('closed'); }); 
 		document.getElementById('vizwrap').classList.remove('closed');
 		
@@ -42,7 +47,7 @@ class ManifestVisualization {
 		if (refresh === true) { document.querySelectorAll('.viz').forEach(el => { el.remove(); }); }
 		
 		if (MI.supplychains.length > 0) {
-			let graph = {nodes:[],links:[]};				
+			let graph = {nodes:[],links:[]};
 		
 			for (let i in MI.supplychains) {
 				if (MI.supplychains[i].graph != undefined) { if (MI.supplychains[i].graph.links.length !== 0) {
@@ -71,9 +76,10 @@ class ManifestVisualization {
 	}
 	
 	TextViz() {
+		this.manifestSupplyChain.CheckTemporalData();
+
 		document.querySelectorAll('#vizwrap, #listview, #textview').forEach(el => { el.classList.add('closed'); }); document.getElementById('textview').classList.remove('closed');
 		document.querySelectorAll('.viz, #vizshell defs').forEach(el => { el.remove(); });
-					
 		for (let sc of MI.supplychains) { if (!(document.getElementById('blob-'+sc.details.id))) {		
 			let scblob = document.createElement('div');
 			scblob.id = 'blob-'+sc.details.id;
@@ -102,7 +108,9 @@ class ManifestVisualization {
 	
 	ListViz() {
 		let values = [];
-		
+		let timeCapture = document.getElementById('timeCapture')
+		timeCapture.style.display = 'none'
+		MI.Interface.RemoveTimeSlider()
 		for (let sc of MI.supplychains) {
 		
 			let rawvalues = sc.features.filter(e => e.geometry.type === 'Point');
@@ -171,7 +179,7 @@ class ManifestVisualization {
 	    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
 	        let cls = 'number';
 	        if (/^"/.test(match)) { if (/:$/.test(match)) { cls = 'key'; } else { cls = 'string'; } } 
-			else if (/true|false/.test(match)) { cls = 'boolean'; } else if (/null/.test(match)) { cls = 'null'; }
+			else if (/true|false/.test(match)) { cls = 'boolean'; } else if (/null/.test()) { cls = 'null'; }
 	        return '<span class="' + cls + '">' + match + '</span>';
 	    });
 	}
@@ -218,19 +226,19 @@ class ForceGraph {
 		MI.Visualization.interval = null;
 		this.svg = d3.select('svg').attr('width', this.width).attr('height', this.height);
 		this.viz = this.svg.append('g').attr('class', 'viz forcegraph');
-		
+
 		this.simulation = d3.forceSimulation().alphaTarget(0.3)
-		
+
 		.force('center', d3.forceCenter((this.width+this.xoffset)/2, this.height/2))
 	    .force('x', d3.forceX(d => { return this._divide(d.ref.properties.index+1).xoffset * this.width + this.xoffset;}).strength(0.4))
 		.force('y', d3.forceY(d => { return this._divide(d.ref.properties.index+1).yoffset * this.height;}).strength(0.4))
-		.force('collision', d3.forceCollide().radius(d => { 
-			let collision = Number(MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value))*2 + 
-				(Number(document.getElementById('viz-slider').value)/10); 
+		.force('collision', d3.forceCollide().radius(d => {
+			let collision = Number(MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value))*2 +
+				(Number(document.getElementById('viz-slider').value)/10);
 					return collision; }).strength(0.1))
 		.force('link', d3.forceLink().id(d => d.id).strength(1).distance(d => { return Number(document.getElementById('viz-slider').value); }))
-	    .force('charge', d3.forceManyBody().strength(d => { 
-			let charge = -350 - (10 * Number(MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value)) + 
+	    .force('charge', d3.forceManyBody().strength(d => {
+			let charge = -350 - (10 * Number(MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value)) +
 				Number(document.getElementById('viz-slider').value)*10);
 					return charge; }));
 		
@@ -244,7 +252,7 @@ class ForceGraph {
 		this.node = this.viz.append('g').attr('class', 'nodes').selectAll('circle').data(this.graph.nodes).enter().append('circle') 
 			.attr('cx', d => MI.Atlas.map.latLngToContainerPoint(d.ref.properties.latlng, MI.Atlas.map.getZoom()).x) 
 			.attr('cy', d => MI.Atlas.map.latLngToContainerPoint(d.ref.properties.latlng, MI.Atlas.map.getZoom()).y) 		
-			.attr('r', d => MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value)) 
+			.attr('r', d => MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value))
 			.style('fill', d => d.fillColor).style('stroke', d => d.color)
 			.call(d3.drag().on('start', d => this._dragstarted(d)).on('drag', d => this._dragged(d)).on('end', d => this._dragended(d)));
 
@@ -277,7 +285,7 @@ class ForceGraph {
 		  let node_coords = this.node.filter(d => Number(d.group) === Number(groupId)).data().map(d => [d.x, d.y]);
 		  return d3.polygonHull(node_coords);
 		};
-		this.valueline = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRomClosed);	
+		this.valueline = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRomClosed);
 	}
 	
 	get width() { return MI.Visualization.width; }
@@ -342,7 +350,7 @@ class ForceGraph {
 			.attr('y', d => d.y+(MI.Atlas.GetScaledRadius(d.ref, document.getElementById('measure-choices').value) + 
 				(0.2 * parseFloat(getComputedStyle(document.documentElement).fontSize)))/2 );
 			 
-		this._updategroups();		
+		this._updategroups();
 	}
 	
 	_updategroups() {
@@ -356,8 +364,15 @@ class ForceGraph {
 	}); }
 	
 	_countdown() {
+
 		MI.Visualization.Clear();
-		MI.Visualization.interval = setTimeout(e => {this.simulation.stop(); }, 3000);
+		if (MI.Interface.sw === true) {
+			this.simulation.restart();
+
+		}
+		else {
+			MI.Visualization.interval = setTimeout(e => {this.simulation.stop(); }, 3000);
+		}
 	}
 
 	_marker(color) {
@@ -589,7 +604,8 @@ class ChordDiagram {
 		this.viz.selectAll('path.chord').data(chords => chords).enter().append('path').attr('class', 'chord')
 			.style('fill', (d,i) => {  return this.adjacency.nodes[d.source.index].fillColor; }).style('opacity', this.opacityDefault)
 			.attr('stroke', (d,i) => { return this.adjacency.nodes[d.source.index].fillColor; }).attr('stroke-width', 1)
-			.attr('stroke-opacity', 0.4).attr('d', this.ribbon);		
+			.attr('stroke-opacity', 0.4).attr('d', this.ribbon);
+
 	}
 	_fade(opacity) {
 	    return (d,i) => {
