@@ -2,7 +2,7 @@ class ManifestUI {
 	constructor() {
 		this.interval = null;
 		this.filter = {clear: true, term: null};
-		this.sw = false;
+		this.sw = true;
 		this.timeSlider = null;
 
 		document.getElementById('fullscreen-menu').addEventListener('click', (e) => { MI.Interface.ToggleFullscreen() }); //MI.Interface.ToggleFullscreen();
@@ -22,14 +22,17 @@ class ManifestUI {
 			let tmin = null;
 			let tmax = null;
 			let numOfStops = null;
+			let endTime = null;
 
 			// determines the min and max time for timeSlider widget
 			for (let n in MI.supplychains) {
 				for (let i in MI.supplychains[n].graph.nodes) {
 					let measures = MI.supplychains[n].features[i].properties.measures;
 					if (measures[0] !== undefined) {
-						let startTime = measures[0].startTime || measures[0].time;
-						let endTime = measures[0].endTime || measures[0].time;
+						let startTime = measures[0].startTime;
+						if (measures[0].endTime !== null) {
+							endTime = measures[0].endTime;
+						}
 						let stops = MI.supplychains[n].hops.length;
 						// Gets the lowest and highest points
 						if (tmin === null || startTime < tmin) { tmin = startTime; }
@@ -39,6 +42,7 @@ class ManifestUI {
 					}
 				}
 			}
+
 			require(["esri/widgets/TimeSlider"
 			], (TimeSlider) => {
 				let unixStartTime = tmin;
@@ -67,15 +71,18 @@ class ManifestUI {
 
 						if (typeof layer.feature !== 'undefined' && layer.feature.properties.measures.length !== 0) {
 							let measures = layer.feature.properties.measures[0];
-							let startTime = measures.startTime || measures.time;
-							let endTime = measures.endTime || measures.time;
+							let startTime = measures.startTime;
+							let endTime = measures.endTime;
 
-							if (currentTimeInSeconds >= startTime && currentTimeInSeconds <= endTime || currentTimeInSeconds >= measures.time) {
+							layer.feature.properties.hidden = true;
+							layer.closePopup();
+							if (currentTimeInSeconds >= startTime) {
 								layer.feature.properties.hidden = false;
 								if (!layer.isPopupOpen()) {
 									layer.openPopup();
 								}
-							} else {
+							}
+							if (currentTimeInSeconds > endTime) {
 								layer.feature.properties.hidden = true;
 								if (layer.isPopupOpen()) {
 									layer.closePopup();
@@ -83,20 +90,20 @@ class ManifestUI {
 							}
 						}
 					}
-					if (this.sw === false) {
-						timeSlider.stop();
-
-					}
+					if (this.sw === false) { timeSlider.stop();}
 				});
 			});
 		}
 		else if (this.sw === true) {
 			this.RemoveTimeSlider();
 		}
-		MI.Visualization.forcegraph._countdown()
+		if (document.getElementById('viz-choices').value === 'forcegraph') {
+			MI.Visualization.interval = setTimeout(e => {MI.Visualization.forcegraph.simulation.stop(); }, 3000);
+		}
 	}
 
 	RemoveTimeSlider() {
+
 		if (this.timeSlider) {
 			this.timeSlider.destroy();
 			this.timeSlider = null;
@@ -107,14 +114,17 @@ class ManifestUI {
 			timeSliderContainer.parentNode.removeChild(timeSliderContainer);
 		}
 
-		this.sw = !this.sw;
+		this.sw = false;
 
 		if (!document.getElementById('timeSlider')) {
 			const newContainer = document.createElement('div');
 			newContainer.id = 'timeSlider';
 			document.body.appendChild(newContainer);
 		}
-		MI.Visualization.forcegraph._countdown()
+
+		if (document.getElementById('viz-choices').value === 'forcegraph') {
+			MI.Visualization.interval = setTimeout(e => {MI.Visualization.forcegraph.simulation.stop(); }, 3000);
+		}
 	}
 
 
