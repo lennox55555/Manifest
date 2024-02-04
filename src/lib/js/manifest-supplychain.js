@@ -35,7 +35,7 @@ class ManifestSupplyChain {
 		document.getElementById('manifestlist').append(mheader,mdetails,mlist);	
 		document.getElementById('mheader-'+id).addEventListener('click', (e, nodeid=id) => { MI.Interface.ShowHeader(nodeid); });
 		document.getElementById('closemap-'+id).addEventListener('click', (e, nodeid=id) => { MI.Supplychain.Remove(nodeid); });
-		document.querySelectorAll('#datalayers input').forEach(el => { el.addEventListener('click', (e) => { 
+		document.querySelectorAll('#datalayers input').forEach(el => { el.addEventListener('click', (e) => {
 			if (el.checked) { MI.Atlas.map.addLayer(MI.Atlas.layerdefs[el.value]); } 
 			else { MI.Atlas.map.removeLayer(MI.Atlas.layerdefs[el.value]); } }); 
 		});
@@ -229,7 +229,7 @@ class ManifestSupplyChain {
 	}
 	
 	SetupPoint(ft, d, index) {
-		let setup = { index: index, type: 'node', style: JSON.parse(JSON.stringify(d.details.style)), basestyle: JSON.parse(JSON.stringify(d.details.style)), latlng: new L.LatLng(ft.geometry.coordinates[1], ft.geometry.coordinates[0]), measures: this.SetupMeasures(ft, d.details)}; //, time: this.SetupTimeSlider(this.times)
+		let setup = { index: index, type: 'node', style: JSON.parse(JSON.stringify(d.details.style)), basestyle: JSON.parse(JSON.stringify(d.details.style)), latlng: new L.LatLng(ft.geometry.coordinates[1], ft.geometry.coordinates[0]), measures: this.SetupMeasures(ft, d.details)};
 		
 		// Individual point color
 		if ( ft.properties.color ) { 
@@ -387,10 +387,6 @@ class ManifestSupplyChain {
 	SetupMeasures(ft, sc) {
 		let measure = ft.properties.measures, measure_list = Object.assign([], this.measures), measurecheck = false, smapmeasures = [];
 		for (let e in ft.properties.measures) {
-			if (MI && MI.supplychains && MI.supplychains[e] && MI.supplychains[e].features[0] && MI.supplychains[e].features[0].properties && MI.supplychains[e].features[0].properties.measures && MI.supplychains[e].features[0].properties.measures[0] && (MI.supplychains[e].features[0].properties.measures[0].time || MI.supplychains[e].features[0].properties.measures[0].startTime)) {
-				document.getElementById('timeCapture').style.display = 'block';
-			}
-
 			if (ft.properties.measures[e].mtype !== '') {
 				let ftmeasure = ft.properties.measures[e], measurecheck = false;
 				for (let l in measure_list) {
@@ -401,6 +397,10 @@ class ManifestSupplyChain {
 				if (typeof sc.measures[ftmeasure.mtype] === 'undefined') { sc.measures[ftmeasure.mtype] = {max: 1, min: 0}; }
 				let mmax = Number(sc.measures[ftmeasure.mtype].max) > Number(ftmeasure.mvalue) ? Number(sc.measures[ftmeasure.mtype].max) : Number(ftmeasure.mvalue);
 				sc.measures[ftmeasure.mtype] = { max: mmax, min: 0 };
+			}
+
+			if (MI && MI.supplychains && MI.supplychains[e] && MI.supplychains[e].features[0] && MI.supplychains[e].features[0].properties && MI.supplychains[e].features[0].properties.measures && MI.supplychains[e].features[0].properties.measures[0] && (MI.supplychains[e].features[0].properties.measures[0].time || MI.supplychains[e].features[0].properties.measures[0].startTime)) {
+				document.getElementById('timeCapture').style.display = 'block';
 			}
 		}
 
@@ -415,23 +415,37 @@ class ManifestSupplyChain {
 		return smapmeasures.length > 0 ? smapmeasures : (Object.entries(ft.properties.measures).length === 0 ? [] : ft.properties.measures);
 	}
 
+	CheckTemporalData() {
+		let startTimeFound = false;
+
+		for (let n = 0; n < MI.supplychains.length; n++) {
+			for (let j = 0; j < MI.supplychains[n].features.length; j++) {
+				const measures = MI.supplychains[n].features[j].properties.measures;
+				if (measures && measures.length > 0 && measures[0].startTime) {
+					startTimeFound = true;
+					break;
+				}
+			}
+			if (startTimeFound) {break;}
+		}
+
+		if (!startTimeFound) {
+			let timeCapture = document.getElementById('timeCapture')
+			timeCapture.style.display = 'none'
+			MI.Interface.RemoveTimeSlider()
+		}
+
+		if (startTimeFound) {
+			let timeCapture = document.getElementById('timeCapture')
+			timeCapture.style.display = 'block'
+		}
+	}
 
 	/** Removes a supply chain from the interface (along with its data) **/
 	Remove(id) {
 		event.stopPropagation();
 		let offset = document.getElementById('mheader-'+id).offsetHeight;
 		let targetid = 0;
-
-		// Remove the contents of the time slider container
-		const timeSliderContainer = document.getElementById('timeSlider');
-		if (timeSliderContainer) {
-			timeSliderContainer.innerHTML = '';
-			this.sw = !this.sw
-		}
-
-		// Removes the timeSlider button
-		document.getElementById('timeCapture').style.display = 'none';
-
 
 		if (MI.supplychains.length > 1) {
 			let prev = document.getElementById('mheader-'+id).previousElementSibling;
@@ -457,7 +471,7 @@ class ManifestSupplyChain {
 				delete MI.supplychains[s]; MI.supplychains.splice(s, 1);
 			}
 		}
-		for (let s in MI.supplychains) { 
+		for (let s in MI.supplychains) {
 			for (let n in MI.supplychains[s].graph.nodes) { 
 				if (MI.supplychains[s].graph.nodes[n].hasOwnProperty('ref')) { MI.supplychains[s].graph.nodes[n].ref.properties.index = s;   } 
 			} 	// TODO can we just change the original and not the ref?
@@ -503,7 +517,9 @@ class ManifestSupplyChain {
 		MI.Interface.RefreshMeasureList(); 
 		if (document.getElementById('blob-'+id)) { document.getElementById('blob-'+id).remove(); }
 		MI.Visualization.Set(MI.Visualization.type);			
-		MI.Interface.SetDocumentTitle();	
+		MI.Interface.SetDocumentTitle();
+
+		this.CheckTemporalData()
 	}
 	
 	Hide(id, hide, type='chain') {
@@ -558,3 +574,4 @@ class ManifestSupplyChain {
 		MI.Atlas.Refresh();
 	}
 }
+
