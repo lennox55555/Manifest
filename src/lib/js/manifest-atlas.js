@@ -3,20 +3,22 @@ class ManifestAtlas {
 	constructor(options) {
 		let pop = !(options.mobile) ? true : false;
 		this.map = new L.Map('map', { 
-			preferCanvas: true, minZoom: 2, worldCopyJump: false, center: new L.LatLng(40.730610,-73.935242), zoom: 3, zoomControl: false, 
-			scrollWheelZoom: false, smoothWheelZoom: true, smoothSensitivity:1, closePopupOnClick: pop 
+			preferCanvas: true, minZoom: 3, maxZoom: 18, worldCopyJump: false, center: new L.LatLng(options.position.lat,options.position.lng), zoom: options.zoom, zoomControl: false, scrollWheelZoom: false, smoothSensitivity:1,  closePopupOnClick: pop 
 		});
 		this.maplayer = [];
 		this.active_point = null;
 		this.homecontrol = null;
 		this.clusterimg = { el: document.createElement('img') }; this.clusterimg.el.src = 'images/markers/cluster.png';
 		this.highlightimg = { el: document.createElement('img') }; this.highlightimg.el.src = 'images/markers/star.png';
+		this.baselayer = 'google';
+		
 		this.colorsets = [['#3498DB','#dbedf9', '#dbedf9'],['#FF0080','#f9dbde','#f9dbde'],['#34db77','#dbf9e7','#dbf9e7'],['#ff6500','#f6d0ca','#f6d0ca'],['#4d34db','#dfdbf9','#dfdbf9'],  ['#5E2BFF','#E0D6FF','#E0D6FF'],['#EE4266','#FAC7D2','#FAC7D2'],['#3BCEAC','#CEF3EA','#CEF3EA'],['#00ABE7','#C2EFFF','#C2EFFF'],['#F85A3E','#FEDDD8','#FEDDD8']];
 			
 		this.tiletypes = {
 			GOOGLE: 'https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
 			DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',	
 			LIGHT: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}{r}.{ext}',	
+			PROTO: 'https://api.protomaps.com/tiles/v2/{z}/{x}/{y}.mvt?key=e66d42174e71874a',
 			TERRAIN: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.{ext}',
 			SATELLITE: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',	
 			
@@ -24,16 +26,18 @@ class ManifestAtlas {
 			MARINE: 'https://tiles.marinetraffic.com/ais_helpers/shiptilesingle.aspx?output=png&sat=1&grouping=shiptype&tile_size=512&legends=1&zoom={z}&X={x}&Y={y}',
 			RAIL: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'
 		};
-		
+		 
 		/* Define Layers */
 		this.layerdefs = {
-			google: 	new L.TileLayer(this.tiletypes.GOOGLE, { maxZoom: 20, className: 'googlebase', detectRetina: options.retinaTiles,
+			google: 	new L.TileLayer(this.tiletypes.GOOGLE, { maxZoom: 18, className: 'googlebase', detectRetina: options.retinaTiles,
 						subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Terrain, Google', edgeBufferTiles: 1 }),		
-			light:		new L.TileLayer(this.tiletypes.LIGHT, {detectRetina: options.retinaTiles, subdomains: 'abcd', minZoom: 0, maxZoom: 20, 
+			light:		new L.TileLayer(this.tiletypes.LIGHT, {detectRetina: options.retinaTiles, subdomains: 'abcd', minZoom: 0, maxZoom: 18, 
 						ext: 'png', attribution: 'Toner, Stamen', edgeBufferTiles: 1  }),
+			//proto: 		protomaps.leafletLayer({url:'services/protomaps.pmtiles'}),
+
 			terrain: 	new L.TileLayer(this.tiletypes.TERRAIN, { detectRetina: options.retinaTiles, subdomains: 'abcd', minZoom: 0, maxZoom: 18, 
 						ext: 'png', attribution: 'Terrain, Stamen', edgeBufferTiles: 1  }),	
-			satellite: 	new L.TileLayer(this.tiletypes.SATELLITE, { detectRetina: options.retinaTiles, maxZoom: 20, maxNativeZoom: 20, 
+			satellite: 	new L.TileLayer(this.tiletypes.SATELLITE, { detectRetina: options.retinaTiles, maxZoom: 18, maxNativeZoom: 18, 
 						attribution: 'Satellite, ESRI', edgeBufferTiles: 1  }),
 		 	dark: 		new L.TileLayer(this.tiletypes.DARK, { subdomains: 'abcd', maxZoom: 19, detectRetina: options.retinaTiles, 
 						attribution: 'Dark, CartoDB', edgeBufferTiles: 1  }),
@@ -48,7 +52,7 @@ class ManifestAtlas {
 						  
 		/* Styles */
 		this.styles = {
-			'point': { fillColor: '#eeeeee', color: '#999999', radius: 10, weight: 3, opacity: 1, fillOpacity: 1 },
+			'point': { fillColor: '#eeeeee', color: '#999999', radius: 10, weight: 3, opacity: 1, fillOpacity: 1, fontsize: 8 },
 			'line': { color: '#dddddd', fillColor: '#dddddd', stroke: true, weight: 2, opacity: 0.2, smoothFactor: 1 },
 			'arrow': { rotation: 0, width: 8, height: 5, color: '#dddddd', fillColor: '#dddddd', weight: 2, opacity: 0.4, fillOpacity: 1 },
 			'live': { rotation: 0, width: 16, height: 10, color: '#f9dbde', fillColor: '#FF0080', weight: 2, opacity: 1, fillOpacity: 1 }	
@@ -62,9 +66,9 @@ class ManifestAtlas {
 		this.map.on('popupclose', (e) => { this.PopupClose(e); });
 		this.map.on('tooltipopen', (e) => { this.TooltipOpen(e); });
 		this.map.on('tooltipclose', (e) => { this.TooltipOpen(e); });
-
-		if (document.body.classList.contains('light')) { this.map.addLayer(this.layerdefs.google); } 
-		else if (document.body.classList.contains('dark')) { this.map.addLayer(this.layerdefs.dark); }	
+		
+		if (document.body.classList.contains('dark')) { this.baselayer = 'dark'; }	
+		this.map.addLayer(this.layerdefs[this.baselayer]); 
 	}
 	
 	Refresh() { this.map._renderer._redraw(); }
@@ -74,6 +78,7 @@ class ManifestAtlas {
 		
 		this.SetActivePoint(e.sourceTarget);
 		this.map.setView(this.GetOffsetLatlng(e.popup._latlng));
+
 		if (!e.popup._source.feature.properties.angle) { this.MapPointClick(this.active_point); }
 
 		e.popup._source.setStyle({fillColor: e.popup._source.feature.properties.style.highlightColor});			
@@ -97,10 +102,10 @@ class ManifestAtlas {
 		MI.Atlas.map.setView(MI.Atlas.GetOffsetLatlng(new L.LatLng(lat,lng), 16), 16);
 	}
 	
-	RenderIntro(feature, layer) {
+	RenderIntro(feature, layer) {		
 		let bgimg = MI.Atlas.getTileImage(feature.properties.latlng.lat, feature.properties.latlng.lng, 13);
 		let popupContent, tooltipTitle, fid = feature.properties.lid;		
-		
+				
 		popupContent = `
 		<div id="intro-content">
 		<h2 id="popup-${fid}" class="poptitle">
@@ -108,9 +113,9 @@ class ManifestAtlas {
 			<span onclick="MI.Atlas.MapPointClick(${fid});">Manifest</span>
 		</h2>
 		<p>${MI.Atlas.PopMLink(ManifestUtilities.Linkify(feature.properties.description))}</p>
-		</div><div id="intro-readme"><div id="intro-content-log"></div></div><div class='clear'></div>`;
-	
+		</div><div id="intro-readme"><div id="intro-content-log">${MI.Util.markdowner.makeHtml(MI.changelog)}</div></div><div class='clear'></div>`;
 		layer.bindPopup(popupContent, { className: 'pop-intro'});
+		
 		tooltipTitle = feature.properties.title; 
 		let tooltipContent = `<div id="tooltip-${fid}" class="mtooltip" style="background: ${feature.properties.style.color}; color: ${feature.properties.style.darkColor}">${tooltipTitle}</div>`;
 		layer.bindTooltip(tooltipContent);	
@@ -119,14 +124,8 @@ class ManifestAtlas {
 		layer.on('mouseover', (e, l=layer, f=feature) => { MI.Atlas.PointMouseOver(e, l, f); });
 		layer.on('mouseout', (e, l=layer, f=feature) => { MI.Atlas.PointMouseOut(e, l, f); });	
 		
-		// Render Change log
-		fetch("CHANGELOG.md").then(c => c.text()).then(readme => this.RenderChangeLog(readme) );
 		layer.setStyle(feature.properties.style); 	
 		MI.Atlas.MeasureSort(feature, layer);
-	}
-	
-	RenderChangeLog(readme) {
-		document.getElementById('intro-content-log').innerHTML = MI.Util.markdowner.makeHtml(readme);
 	}
 	
 	/** Render points by setting up a GeoJSON feature for display **/
@@ -180,16 +179,22 @@ class ManifestAtlas {
 	PopMLink(str) { return str.replaceAll('class="manifest-link"','class="manifest-link" onclick="MI.Interface.Link(event.target.href, event);"'); }
 
 	/** Render lines by setting up a GeoJSON feature for display **/
-	RenderLine(feature, layer) {		
-		let title = feature.properties.title === 'Node' ? '' : feature.properties.title, fid = feature.properties.lid;
-		if (title !== '') {
-			let popupContent = `
-			<h2 id="popup-${fid}" class="popuphop" style="background: ${feature.properties.style.fillColor}; color: ${feature.properties.style.color}">${title.split('|').join('<br/><i class="fas fa-chevron-down"></i><br/>')}</h2>`;
-			let tooltipContent = `<div id="tooltip-${fid}" class="mtooltip" style="background: ${feature.properties.style.fillColor}; color: ${feature.properties.style.color}">${title.split('|').join('<br/><i class="fas fa-chevron-down"></i><br/>')}</div>`;
-			layer.bindTooltip(tooltipContent);
-			//layer.bindPopup(popupContent);
-		}	
+	RenderLine(feature, layer) {
+		let tooltipContent = `
+        <div id="tooltip-${feature.properties.index}" class="mtooltip" style="background: ${feature.properties.style.fillColor}; color: ${feature.properties.style.color}">
+            <strong>Transition Information</strong>
+            <ul>
+                <li>Title: ${feature.properties.title}</li>
+                <li>Distance: ${feature.properties.distance || 'Unknown'}</li>
+                <li>Transportation Method: ${feature.properties.transportation || 'Unknown'}</li>
+                
+            </ul>
+        </div>`;
+
+		layer.bindTooltip(tooltipContent, {permanent: false, direction: 'auto'});
 	}
+
+
 
 	/** Focus on a point on the map and open its popup. **/
 	PointFocus(pid, fit=false, flyto=false) {	
@@ -217,7 +222,15 @@ class ManifestAtlas {
 							this.map._layers[i].setStyle({fillColor: this.map._layers[i].feature.properties.style.highlightColor});			
 								
 						} else {
-							this.map._layers[i].openPopup(); 
+							if (MI.options.storyMap && this.map.getZoom !== 10) { 
+								if (this.map.getBounds().contains(this.map._layers[i]._latlng)) {
+									this.map.flyTo(this.GetOffsetLatlng(this.map._layers[i]._latlng), 10, {duration: 1}); 		
+								} else {
+									this.map.setView(this.GetOffsetLatlng(this.map._layers[i]._latlng), 10, {reset: true}); 
+								}
+							} else {								
+								this.map._layers[i].openPopup(); 
+							}
 						}
 					}
 				}
@@ -353,7 +366,7 @@ class ManifestAtlas {
 		}
 		else {
 			this.active_point = null;
-			this.homecontrol.setHomeCoordinates(new L.LatLng(40.730610,-73.935242));		
+			this.homecontrol.setHomeCoordinates(new L.LatLng(MI.options.position.lat,MI.options.position.lng));		
 		}	
 		return this.active_point;
 	}
@@ -364,8 +377,8 @@ class ManifestAtlas {
 			const mlistId = document.getElementsByClassName('mlist')[document.getElementsByClassName('mlist').length-1].id.split('-')[1];
 			const nodeId = document.getElementsByClassName('mlist')[document.getElementsByClassName('mlist').length-1].childNodes[0].id.split('_')[1];
 			if (MI.Visualization.type === 'map') {
-				MI.Interface.ShowHeader(mlistId);
 				if (!MI.options.storyMap) {
+					MI.Interface.ShowHeader(mlistId);
 					MI.Atlas.PointFocus(nodeId, true);	
 				}
 			}	
@@ -373,7 +386,7 @@ class ManifestAtlas {
 				MI.Interface.ShowHeader(mlistId);
 			}	
 		} else if (type === 'center') {
-			MI.Atlas.map.setView(new L.LatLng(40.730610,-73.935242), 3); 
+			MI.Atlas.map.setView(this.GetOffsetLatlng(new L.LatLng(MI.options.position.lat,MI.options.position.lng)), MI.options.zoom); 
 		}
 	}
 	
@@ -381,7 +394,7 @@ class ManifestAtlas {
 		if (show) {   
 			document.querySelectorAll('.leaflet-overlay-pane, .leaflet-control-container, #mapcapture').forEach(el => { el.classList.remove('closed'); }); }
 		else { if (this.active_point !== null && this.active_point.closePopup) { this.active_point.closePopup(); } 
-			document.querySelectorAll('.leaflet-overlay-pane, .leaflet-control-container, #mapcapture').forEach(el => { el.classList.add('closed'); }); }	
+			document.querySelectorAll('.leaflet-overlay-pane, .leaflet-control-container').forEach(el => { el.classList.add('closed'); }); }
 		this.Refresh();
 	}
 	GetRadius(ft, cluster=true) {
