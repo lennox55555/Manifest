@@ -9,13 +9,14 @@ class Manifest {
 		this.options = options;
 		// Default options (passed from main.js)
 		// options = { serviceurl: 'https://manifest.supplystudies.com/services/', hoverHighlight: false, retinaTiles: false };
-		
+
 		this.initialized = false;
+		this.changelog = 'no notes';
 		
 		this.supplychains = [];
 		this.Supplychain = new ManifestSupplyChain();
-		this.Interface = new ManifestUI();
-		this.Atlas = new ManifestAtlas({mobile: this.Interface.IsMobile(), retinaTiles: options.retinaTiles});
+		this.Interface = new ManifestUI(); this.options.mobile = this.Interface.IsMobile();
+		this.Atlas = new ManifestAtlas(options);
 		this.Visualization = new ManifestVisualization();		
 		this.Messenger = new ManifestMessenger(this.Atlas);
 		this.Util = new ManifestUtilities();
@@ -24,7 +25,8 @@ class Manifest {
 	/** SupplyChain processor main wrapper function. **/
 	Process(type, d, options) {
 		for (let s in MI.supplychains) { if (MI.supplychains[s].details.id === options.id) { return; }}
-	
+		options = Object.assign(options, MI.options);
+		
 		switch(type) {
 			case 'manifest': d = this.Supplychain.Map(this.Supplychain.Setup(this.FormatMANIFEST(d, options))); 
 				this.ManifestGraph({supplychain: {stops:d.stops, hops:d.hops}}, Object.assign(options, {style: d.details.style})); break;
@@ -35,31 +37,29 @@ class Manifest {
 				this.ManifestGraph({supplychain: {stops:d.stops, hops:d.hops}}, Object.assign(options, {style: d.details.style})); break;
 		}		
 		this.Visualization.Set(MI.Visualization.type);	
-		if (options.start) { MI.Atlas.SetView();}	
+		if (options.start) { MI.Atlas.SetView(MI.options.view);}	
 	}
 
 	/** Format a Manifest file so Manifest can understand it */
 	FormatMANIFEST(manifest, options) {	
-		//manifest.options = { color: ['#000000','#999999','#999999'] };
-		
-		let d = {type: 'FeatureCollection', mtype: 'manifest', raw: manifest, mapper: {}, options: manifest.options ? manifest.options : {}, details: {id: options.id, url: '#manifest-'+options.url, layers: [], measures: []}, properties: {title: manifest.summary.name, description: MI.Util.markdowner.makeHtml(manifest.summary.description)}, features: [], stops: [], hops: []};
+		let d = {type: 'FeatureCollection', mtype: 'manifest', raw: manifest, mapper: {}, options: options, details: {id: options.id, url: '#manifest-'+options.url, layers: [], measures: []}, properties: {title: manifest.summary.name, description: MI.Util.markdowner.makeHtml(manifest.summary.description)}, features: [], stops: [], hops: []};
 		if (d.details.url === '#manifest-') { d.details.url = '#'; }
 		for (let n of manifest.nodes) {
 			let ft = {type: 'Feature', properties: {index: n.overview.index, scid: options.id, title: n.overview.name, description: MI.Util.markdowner.makeHtml(n.overview.description), placename: n.location.address, category: n.attributes.category ? n.attributes.category : '', images: n.attributes.image.map(function(s) { return s.URL;}).join(','), icon: n.attributes.icon ? n.attributes.icon : '', color: n.attributes.color ? n.attributes.color : '', measures: n.measures.measures, sources: n.attributes.sources.map(function(s) { return s.URL;}).join(','), notes: MI.Util.markdowner.makeHtml(n.notes.markdown)}, geometry: {type:'Point', coordinates:[n.location.geocode.split(',')[1] ? n.location.geocode.split(',')[1] : '', n.location.geocode.split(',')[0] ? n.location.geocode.split(',')[0] : '']}};
 			//for (let attr in manifest.nodes[i].attributes) { d.features[i][attr] = manifest.nodes[i].attributes[attr]; }
 			d.stops.push({ local_stop_id:Number(n.overview.index), id:Number(n.overview.index), attributes:ft.properties, geometry:ft.geometry });
 			if (n.attributes.destinationindex !== '') {
+				//dev
 				let hops = n.attributes.destinationindex.split(',');
-				for (let h in hops) { d.hops.push({ from_stop_id:Number(n.overview.index), to_stop_id:Number(hops[h]), attributes:ft.properties}); }
-			}		
+			}
 			d.features.push(ft);
 		}
 		for (let h of d.hops) {
 			h.from = d.features[h.from_stop_id-1]; h.to = d.features[h.to_stop_id-1];
+			//dev
 			let ft = {type: 'Feature', properties: {title: h.from.properties.title+'|'+h.to.properties.title, category: [...new Set([... h.from.properties.category.split(','),...h.to.properties.category.split(',')])].join(','), connections: {from: {scid: h.from.properties.scid, index: h.from.properties.index}, to: {scid:h.to.properties.scid, index:h.to.properties.index}}}, geometry: {type:"Line", coordinates:[h.from.geometry.coordinates,h.to.geometry.coordinates]}};
 			d.features.push(ft);
-		}
-	
+		}	
 		return d;
 	}
 
@@ -72,63 +72,119 @@ class Manifest {
 	}
 
 	/** Format a google sheet file so Manifest can understand it */
-	FormatGSHEET(d, options) {
-		d.raw = JSON.parse(JSON.stringify(d));
-		let sheetoverview = this.GSheetToJson(d.g)[0], sheetpoints = this.GSheetToJson(d.r);
-		let sheetid = options.id;
-		let sheetsc = {};
+	// dev
+	FormatMANIFEST(manifest, options) {
+		let d = {
+			type: 'FeatureCollection',
+			mtype: 'manifest',
+			raw: manifest,
+			mapper: {},
+			options: options,
+			details: {
+				id: options.id,
+				url: '#manifest-' + options.url,
+				layers: [],
+				measures: []
+			},
+			properties: {
+				title: manifest.summary.name,
+				description: this.Util.markdowner.makeHtml(manifest.summary.description)
+			},
+			features: [],
+		};
 
-		if (typeof sheetoverview.rootgeocode === 'undefined') {
-			sheetsc = {type: 'FeatureCollection', mtype: 'gsheet', raw: d.raw, mapper: {}, options: sheetoverview.options ? sheetoverview.options : {}, details: {id: options.id, url: '#gsheet-'+options.idref, layers: [], measures: []}, properties: {title: sheetoverview.name, description: MI.Util.markdowner.makeHtml(sheetoverview.description)}, features: [], stops: [], hops: []};
-			
-			sheetpoints = sheetpoints.sort((a,b) => Number(a.index) - Number(b.index) );
-			
-			if (sheetpoints[0].index === 'An increasing number for indexing purposes') { sheetpoints.splice(0,1); }
-			if (sheetpoints[0].index === '0' && sheetpoints[0].name === 'Sample') { sheetpoints.splice(0,1); }
-			
-			// @TODO This logic works great (see also hop handling below) -- should do this with the FormatManifest function also.
-			let indexmap = [];
-			for (let i = 0; i < sheetpoints.length; i++) { indexmap[sheetpoints[i].index] = i+1; sheetpoints[i].index = i+1; }
-			
-			for (let n of sheetpoints) {
-				let ft = {type: 'Feature', properties: {index: n.index, scid: options.id, title: n.name, description: MI.Util.markdowner.makeHtml(n.description), placename: n.location, category: n.category, images: n.images, icon: n.icon ? n.icon : '', color: n.color ? n.color : '', measures: typeof n.measure !== 'undefined' && n.measure !== '' ? n.measure.split(';').map(function(s) { if (typeof s !== 'undefined' && (s.split(',').length === 3)) { return {mtype:s.split(',')[0], mvalue:s.split(',')[1], munit:s.split(',')[2]};}}) : [], sources: n.sources, notes: MI.Util.markdowner.makeHtml(typeof n.additionalnotes !== 'undefined' ? n.additionalnotes : '')}, geometry: {type:'Point', coordinates:[n.geocode.split(',')[1] ? n.geocode.split(',')[1] : '', n.geocode.split(',')[0] ? n.geocode.split(',')[0] : '']}};
-				sheetsc.stops.push({ local_stop_id:Number(n.index), id:Number(n.index), attributes:ft.properties, geometry:ft.geometry });
-				if (n.destinationindex !== '') {
-					let hops = n.destinationindex.replace(' ', '').split(',');
-					for (let h in hops) { if (typeof indexmap[hops[h]] !== 'undefined') {
-						sheetsc.hops.push({ from_stop_id:Number(n.index), to_stop_id:Number(indexmap[hops[h]]), attributes:ft.properties}); 
-					}}
-				}		
-				sheetsc.features.push(ft);
+		let nodeIndexMap = {};
+
+		// creates features for nodes
+		manifest.nodes.forEach((node) => {
+			let nodeFeature = {
+				type: 'Feature',
+				properties: {
+					index: node.overview.index,
+					scid: options.id,
+					title: node.overview.name,
+					description: this.Util.markdowner.makeHtml(node.overview.description),
+					placename: node.location.address,
+					category: node.attributes.category || '',
+					images: node.attributes.image.map(s => s.URL).join(','),
+					icon: node.attributes.icon || '',
+					color: node.attributes.color || '',
+					measures: node.measures.measures,
+					sources: node.attributes.sources.map(s => s.URL).join(','),
+					notes: this.Util.markdowner.makeHtml(node.notes.markdown),
+				},
+				geometry: {
+					type: 'Point',
+					coordinates: [
+						parseFloat(node.location.geocode.split(',')[1]),
+						parseFloat(node.location.geocode.split(',')[0])
+					]
+				}
+			};
+
+			d.features.push(nodeFeature);
+			// links node index to map
+			nodeIndexMap[node.overview.index] = nodeFeature;
+		});
+
+		// create lines between nodes
+		manifest.nodes.forEach(node => {
+			let sourceNodeFeature = nodeIndexMap[node.overview.index];
+
+			if (Array.isArray(node.attributes.destinationindex)) {
+				node.attributes.destinationindex.forEach(destination => {
+					if (typeof destination === 'object' && destination.index !== undefined) {
+						let targetNodeFeature = nodeIndexMap[destination.index];
+						if (sourceNodeFeature && targetNodeFeature) {
+							let hopFeature = {
+								type: 'Feature',
+								properties: {
+									title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
+									from_stop_id: node.overview.index,
+									to_stop_id: destination.index,
+									distance: destination.distance || 'Unknown',
+									transportation: destination.transportation || 'Unknown',
+								},
+								geometry: {
+									type: "LineString",
+									coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
+								}
+							};
+							d.features.push(hopFeature);
+						}
+					}
+				});
+			} else if (typeof node.attributes.destinationindex === 'string') {
+				// handles default formats
+				let destinations = node.attributes.destinationindex.split(',');
+				destinations.forEach(destinationIndex => {
+					let index = parseInt(destinationIndex.trim(), 10);
+					let targetNodeFeature = nodeIndexMap[index];
+					if (!isNaN(index) && targetNodeFeature) {
+						let hopFeature = {
+							type: 'Feature',
+							properties: {
+								title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
+								from_stop_id: node.overview.index,
+								to_stop_id: index,
+								distance: 'Unknown',
+								transportation: 'Unknown',
+							},
+							geometry: {
+								type: "LineString",
+								coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
+							}
+						};
+						d.features.push(hopFeature);
+					}
+				});
 			}
-			for (let h of sheetsc.hops) {
-				h.from = sheetsc.features[h.from_stop_id-1]; h.to = sheetsc.features[h.to_stop_id-1];
-				let ft = {type: 'Feature', properties: {title: h.from.properties.title+'|'+h.to.properties.title, category: [...new Set([... h.from.properties.category.split(','),...h.to.properties.category.split(',')])].join(','), connections: {from: {scid: h.from.properties.scid, index: h.from.properties.index}, to: {scid:h.to.properties.scid, index:h.to.properties.index}}}, geometry: {type:"Line", coordinates:[h.from.geometry.coordinates,h.to.geometry.coordinates]}};
-				sheetsc.features.push(ft);
-			}	
-		}
-		else { // Format a Legacy Gsheet		
-			sheetsc = {type:'FeatureCollection', mtype: 'gsheet', features: [], properties: { title: sheetoverview.name, description: sheetoverview.description, address: sheetoverview.rootaddress, geocode: sheetoverview.rootgeocode, measure: sheetoverview.measure }, details: options, mapper: {}, raw: d.raw, stops: [], hops: []};
-			sheetsc.details.layers = []; sheetsc.details.measures = {};
-			sheetsc.details.url = '#gsheet-'+sheetsc.details.url.split('&id=')[1];
-			for (let point of sheetpoints) {
-				let j = sheetsc.features.length;
-				sheetsc.features[j] = {type: 'Feature'};			
-				sheetsc.features[j].properties = {};	
-				sheetsc.features[j].properties.title = point.name;
-				sheetsc.features[j].properties.description = point.description;
-				sheetsc.features[j].properties.placename = point.location;
-				sheetsc.features[j].properties.category = point.category;
-				sheetsc.features[j].properties.sources = point.sources;
-				sheetsc.features[j].properties.notes = point.notes;
-				sheetsc.features[j].properties.measures = {};
-				sheetsc.features[j].geometry = {type:'Point', coordinates:[Number(point.geocode.split(',')[1]), Number(point.geocode.split(',')[0])]};				
-				sheetsc.stops.push({ 'local_stop_id':Math.max(1,j), 'id':Math.max(1,j), 'attributes':sheetsc.features[j].properties });
-			}					
-		}
-		return sheetsc;
-	
+		});
+
+		return d;
 	}
+
+
 	GSheetToJson(sheet) {
 		let rows = [];
 		for (let i = 1; i < sheet.values.length; i++) {
@@ -500,8 +556,8 @@ class ManifestUtilities {
 		this.markdowner.addExtension(customClassExt);
 	}
 	static Linkify(str) { return str.replaceAll(ManifestUtilities.URLMatch(), '<a href=\"$1\">$1</a>').replaceAll(ManifestUtilities.ManifestMatch(), '<a class="manifest-link" href="$1">$1</a>'); }
-	static URLMatch() { return /(?![^<]*>|[^<>]*<\/(?!(?:p|pre|li|span)>))((https?:)\/\/[a-z0-9&#=.\/\-?_]+)/gi; }
-	static ManifestMatch() { return /(?![^<]*>|[^<>]*<\/(?!(?:p|pre|li|span)>))((manifest?:)\/\/[a-z0-9&#=.\/\-?_]+)/gi; }
+	static URLMatch() { return /(?![^<]*>|[^<>]*<\/(?!(?:p|pre|li|span)>))(https?:\/\/[^\s"]+)/gi; }
+	static ManifestMatch() { return /(?![^<]*>|[^<>]*<\/(?!(?:p|pre|li|span)>))(manifest?:\/\/[^\s"]+)/gi; }
 	static RemToPixels(rem) { return rem * parseFloat(getComputedStyle(document.documentElement).fontSize); }
 }
 
