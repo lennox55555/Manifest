@@ -95,7 +95,6 @@ class Manifest {
 
 		let nodeIndexMap = {};
 
-		// creates features for nodes
 		manifest.nodes.forEach((node) => {
 			let nodeFeature = {
 				type: 'Feature',
@@ -123,11 +122,9 @@ class Manifest {
 			};
 
 			d.features.push(nodeFeature);
-			// links node index to map
 			nodeIndexMap[node.overview.index] = nodeFeature;
 		});
 
-		// create lines between nodes
 		manifest.nodes.forEach(node => {
 			let sourceNodeFeature = nodeIndexMap[node.overview.index];
 
@@ -144,6 +141,7 @@ class Manifest {
 									to_stop_id: destination.index,
 									distance: destination.distance || 'Unknown',
 									transportation: destination.transportation || 'Unknown',
+									extraInfo: destination.extraInfo || 'None', // Handling arbitrary value
 								},
 								geometry: {
 									type: "LineString",
@@ -155,7 +153,6 @@ class Manifest {
 					}
 				});
 			} else if (typeof node.attributes.destinationindex === 'string') {
-				// handles default formats
 				let destinations = node.attributes.destinationindex.split(',');
 				destinations.forEach(destinationIndex => {
 					let index = parseInt(destinationIndex.trim(), 10);
@@ -169,6 +166,7 @@ class Manifest {
 								to_stop_id: index,
 								distance: 'Unknown',
 								transportation: 'Unknown',
+								extraInfo: 'None', // Default value for arbitrary information
 							},
 							geometry: {
 								type: "LineString",
@@ -183,6 +181,7 @@ class Manifest {
 
 		return d;
 	}
+
 
 
 	GSheetToJson(sheet) {
