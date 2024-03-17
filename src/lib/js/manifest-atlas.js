@@ -180,19 +180,50 @@ class ManifestAtlas {
 
 	/** Render lines by setting up a GeoJSON feature for display **/
 	RenderLine(feature, layer) {
-		let tooltipContent = `
-        <div id="tooltip-${feature.properties.index}" class="mtooltip" style="background: ${feature.properties.style.fillColor}; color: ${feature.properties.style.color}">
-            <strong>Transition Information</strong>
-            <ul>
-                <li>Title: ${feature.properties.title}</li>
-                <li>Distance: ${feature.properties.distance || 'Unknown'}</li>
-                <li>Transportation Method: ${feature.properties.transportation || 'Unknown'}</li>
-                
-            </ul>
-        </div>`;
+		let propertiesList = `
+	<div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+    	<div style="width: 100%; height: 1.5px; background-color: #746F80; margin: auto; margin-top: 5px"></div>
+    	<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 0;">
+        	<div style="width: 1.5px; height: 20px; background-color: transparent;"></div>
+        			
+        	<p style="flex-grow: 1; text-align: center; margin: 0 5px;">From Index: <span style="color: #746F80;">${feature.properties.from_stop_id}</span></p>
+        	<div style="width: 1.5px; height: 20px; background-color: #746F80;"></div>
+        	<p style="flex-grow: 1; text-align: center; margin: 0 5px;">To Index: <span style="color: #746F80;">${feature.properties.to_stop_id}</span></p>
+        
+        	<div style="width: 1.5px; height: 20px; background-color: transparent;"></div>
+    	</div>
+	</div>`;
+
+		if (feature.properties.distance && feature.properties.distance !== "Unknown") {
+			propertiesList += `<p style="text-align: left;">Distance: <span style="color: #746F80;">${feature.properties.distance}</span></p>`;
+		}
+
+		if (feature.properties.transportation && feature.properties.transportation !== "Unknown") {
+			propertiesList += `<p style="text-align: left;">Transportation: <span style="color: #746F80;">${feature.properties.transportation}</span></p>`;
+		}
+
+		if (feature.properties.extraInfo && feature.properties.extraInfo !== "None") {
+			propertiesList += `<p style="text-align: left;">Extra Info: <span style="color: #746F80;">${feature.properties.extraInfo}</span></p>`;
+		}
+
+
+
+		// Title handling
+		let title = feature.properties.title === 'Node' ? '' : feature.properties.title;
+		let fid = feature.properties.lid;
+
+		let fillColor = feature.properties.style && feature.properties.style.fillColor ? feature.properties.style.fillColor : '#FFFFFF';
+		let color = feature.properties.style && feature.properties.style.color ? feature.properties.style.color : '#000000';
+
+		let tooltipContent = title !== '' ? `
+    <div id="tooltip-${fid}" class="mtooltip" style="background: ${fillColor}; color: ${color}">
+        <strong>${title.split('|').join('<br/><i class="fas fa-chevron-down"></i><br/>')}</strong>
+        <div>${propertiesList}</div>
+    </div>` : '';
 
 		layer.bindTooltip(tooltipContent, {permanent: false, direction: 'auto'});
 	}
+
 
 
 
