@@ -40,7 +40,7 @@ class Manifest {
 		if (options.start) { MI.Atlas.SetView(MI.options.view);}
 	}
 
-	/** Format a Manifest file so Manifest can understand it */
+
 
 
 	/** Format a legacy Sourcemap file so Manifest can understand it */
@@ -52,7 +52,7 @@ class Manifest {
 	}
 
 
-
+	/** Format a Manifest file so Manifest can understand it */
 	FormatMANIFEST(manifest, options) {
 		let d = {
 			type: 'FeatureCollection',
@@ -164,126 +164,11 @@ class Manifest {
 			};
 			d.features.push(ft);
 		}
-		console.log('d:',d)
-		console.log('Final hops details:', d.hops);
 		return d;
 	}
 
 
 	/** Format a google sheet file so Manifest can understand it */
-	// dev
-	// FormatMANIFEST(manifest, options) {
-	// 	let d = {
-	// 		type: 'FeatureCollection',
-	// 		mtype: 'manifest',
-	// 		raw: manifest,
-	// 		mapper: {},
-	// 		options: options,
-	// 		details: {
-	// 			id: options.id,
-	// 			url: '#manifest-' + options.url,
-	// 			layers: [],
-	// 			measures: []
-	// 		},
-	// 		properties: {
-	// 			title: manifest.summary.name,
-	// 			description: this.Util.markdowner.makeHtml(manifest.summary.description)
-	// 		},
-	// 		features: [],
-	// 	};
-	// 	//console.log(MI.supplychains[0].graph.nodes)
-	//
-	// 	let nodeIndexMap = {};
-	//
-	// 	manifest.nodes.forEach((node) => {
-	// 		let nodeFeature = {
-	// 			type: 'Feature',
-	// 			properties: {
-	// 				index: node.overview.index,
-	// 				scid: options.id,
-	// 				title: node.overview.name,
-	// 				description: this.Util.markdowner.makeHtml(node.overview.description),
-	// 				placename: node.location.address,
-	// 				category: node.attributes.category || '',
-	// 				images: node.attributes.image.map(s => s.URL).join(','),
-	// 				icon: node.attributes.icon || '',
-	// 				color: node.attributes.color || '',
-	// 				measures: node.measures.measures,
-	// 				sources: node.attributes.sources.map(s => s.URL).join(','),
-	// 				notes: this.Util.markdowner.makeHtml(node.notes.markdown),
-	// 			},
-	// 			geometry: {
-	// 				type: 'Point',
-	// 				coordinates: [
-	// 					parseFloat(node.location.geocode.split(',')[1]),
-	// 					parseFloat(node.location.geocode.split(',')[0])
-	// 				]
-	// 			}
-	// 		};
-	//
-	// 		d.features.push(nodeFeature);
-	// 		nodeIndexMap[node.overview.index] = nodeFeature;
-	// 	});
-	//
-	// 	manifest.nodes.forEach(node => {
-	// 		let sourceNodeFeature = nodeIndexMap[node.overview.index];
-	//
-	// 		if (Array.isArray(node.attributes.destinationindex)) {
-	// 			node.attributes.destinationindex.forEach(destination => {
-	// 				if (typeof destination === 'object' && destination.index !== undefined) {
-	// 					let targetNodeFeature = nodeIndexMap[destination.index];
-	// 					if (sourceNodeFeature && targetNodeFeature) {
-	// 						let hopFeature = {
-	// 							type: 'Feature',
-	// 							properties: {
-	// 								title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
-	// 								from_stop_id: node.overview.index,
-	// 								to_stop_id: destination.index,
-	// 								distance: destination.distance || 'Unknown',
-	// 								transportation: destination.transportation || 'Unknown',
-	// 								extraInfo: destination.extraInfo || 'None',
-	// 							},
-	// 							geometry: {
-	// 								type: "LineString",
-	// 								coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
-	// 							}
-	// 						};
-	// 						d.features.push(hopFeature);
-	// 					}
-	// 				}
-	// 			});
-	// 		} else if (typeof node.attributes.destinationindex === 'string') {
-	// 			let destinations = node.attributes.destinationindex.split(',');
-	// 			destinations.forEach(destinationIndex => {
-	// 				let index = parseInt(destinationIndex.trim(), 10);
-	// 				let targetNodeFeature = nodeIndexMap[index];
-	// 				if (!isNaN(index) && targetNodeFeature) {
-	// 					let hopFeature = {
-	// 						type: 'Feature',
-	// 						properties: {
-	// 							title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
-	// 							from_stop_id: node.overview.index,
-	// 							to_stop_id: index,
-	// 							distance: 'Unknown',
-	// 							transportation: 'Unknown',
-	// 							extraInfo: 'None',
-	// 						},
-	// 						geometry: {
-	// 							type: "LineString",
-	// 							coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
-	// 						}
-	// 					};
-	// 					d.features.push(hopFeature);
-	// 				}
-	// 			});
-	// 		}
-	// 	});
-	//
-	// 	return d;
-	// }
-
-
-
 	GSheetToJson(sheet) {
 		let rows = [];
 		for (let i = 1; i < sheet.values.length; i++) {
