@@ -1,69 +1,191 @@
 class ManifestUI {
-	constructor() { 
+	constructor() {
 		this.interval = null;
 		this.filter = {clear: true, term: null};
-		
-		document.getElementById('fullscreen-menu').addEventListener('click', (e) => { MI.Interface.ToggleFullscreen(); });
+		this.sw = true;
+		this.timeSlider = null;
+
+		document.getElementById('fullscreen-menu').addEventListener('click', (e) => { MI.Interface.ToggleFullscreen() }); //MI.Interface.ToggleFullscreen();
 		document.getElementById('mapcapture').addEventListener('click', (e) => { MI.ExportManifest(null, document.title, 'map'); });
 		document.querySelectorAll('#minfo, #minfo-hamburger').forEach(el => { el.addEventListener('click', (e) => { MI.Interface.ShowLauncher(); }); });
-	
+		document.getElementById('timeCapture').addEventListener('click', (e) => {this.SetupTimeSlider()})
 		// CHECK used to also assign mouseup to first below
 		document.getElementById('searchbar').addEventListener('keyup', (e) => { MI.Interface.Search(); });
-		document.getElementById('searchclear').addEventListener('click', (e) => { MI.Interface.ClearSearch(); MI.Interface.Search(); });	
+		document.getElementById('searchclear').addEventListener('click', (e) => { MI.Interface.ClearSearch(); MI.Interface.Search(); });
 	}
-	
-	/** Called after Manifest has been initialized and the first supply chain loaded **/ 
-	CleanupInterface() { 	
-		MI.initialized = true; console.log(MI); 
+
+
+	SetupTimeSlider() {
+		if (this.sw === false) {
+			this.sw = !this.sw;
+
+			let tmin = null;
+			let tmax = null;
+			let numOfStops = 0; // Assume stops can be directly counted now
+			let endTime = null;
+
+			// Iterates through each supply chain to determine min and max time
+			Object.values(MI.supplychains).forEach(supplychain => {
+				supplychain.features.forEach(feature => {
+					// Check if measures exists and has elements
+					if (feature.properties.measures && feature.properties.measures.length > 0) {
+						let measures = feature.properties.measures;
+						measures.forEach(measure => {
+							let startTime = measure.startTime;
+							if (measure.endTime !== null) {
+								endTime = measure.endTime;
+							}
+							// Update minimum and maximum times
+							if (tmin === null || startTime < tmin) { tmin = startTime; }
+							if (tmax === null || endTime > tmax) { tmax = endTime; }
+						});
+					}
+				});
+				// Assuming each feature represents a stop, for simplification
+				numOfStops += supplychain.features.length;
+			});
+
+			require(["esri/widgets/TimeSlider"], (TimeSlider) => {
+				let unixStartTime = tmin;
+				let unixEndTime = tmax;
+
+				const timeSlider = new TimeSlider({
+					container: document.getElementById('timeSlider'),
+					timeVisible: true,
+					loop: false,
+				});
+
+				timeSlider.fullTimeExtent = {
+					start: new Date((unixStartTime) * 1000),
+					end: new Date((unixEndTime) * 1000)
+				};
+				timeSlider.stops = {
+					count: numOfStops // Assuming this still makes sense; adjust if not
+				};
+
+				timeSlider.watch("timeExtent", (timeExtent) => {
+					MI.Visualization.Update();
+					const currentTimeInSeconds = (timeExtent.start.getTime() + timeExtent.end.getTime()) / 2000;
+
+					// Adapted layer visibility logic based on updated structure
+					Object.values(MI.Atlas.map._layers).forEach(layer => {
+						// Ensure measures is defined and not empty
+						if (typeof layer.feature !== 'undefined' && layer.feature.properties.measures && layer.feature.properties.measures.length > 0) {
+							let measures = layer.feature.properties.measures[0];
+							let startTime = measures.startTime;
+							let endTime = measures.endTime;
+
+							layer.feature.properties.hidden = true;
+							layer.closePopup();
+							if (currentTimeInSeconds >= startTime) {
+								layer.feature.properties.hidden = false;
+								if (!layer.isPopupOpen()) {
+									layer.openPopup();
+								}
+							}
+							if (endTime && currentTimeInSeconds > endTime) {
+								layer.feature.properties.hidden = true;
+								if (layer.isPopupOpen()) {
+									layer.closePopup();
+								}
+							}
+						}
+					});
+					if (this.sw === false) { timeSlider.stop(); }
+				});
+			});
+		} else if (this.sw === true) {
+			this.RemoveTimeSlider();
+		}
+		if (document.getElementById('viz-choices').value === 'forcegraph') {
+			MI.Visualization.interval = setTimeout(e => {MI.Visualization.forcegraph.simulation.stop(); }, 3000);
+		}
+	}
+
+
+
+	RemoveTimeSlider() {
+
+		if (this.timeSlider) {
+			this.timeSlider.destroy();
+			this.timeSlider = null;
+		}
+
+		const timeSliderContainer = document.getElementById('timeSlider');
+		if (timeSliderContainer && timeSliderContainer.parentNode) {
+			timeSliderContainer.parentNode.removeChild(timeSliderContainer);
+		}
+
+		this.sw = false;
+
+		if (!document.getElementById('timeSlider')) {
+			const newContainer = document.createElement('div');
+			newContainer.id = 'timeSlider';
+			document.body.appendChild(newContainer);
+		}
+
+		if (document.getElementById('viz-choices').value === 'forcegraph') {
+			MI.Visualization.interval = setTimeout(e => {MI.Visualization.forcegraph.simulation.stop(); }, 3000);
+		}
+	}
+
+
+	/** Called after Manifest has been initialized and the first supply chain loaded **/
+	CleanupInterface() {
+		MI.initialized = true; console.log(MI);
 		document.getElementById('load-samples').addEventListener('change', function() {
 			const selected = document.getElementById('load-samples').value;
-		
-			if (selected === 'url') { document.getElementById('loadlistpanel').className = 'url'; } 
-			else if (selected === 'file') { document.getElementById('loadlistpanel').className = 'file'; } 
+
+			if (selected === 'url') { document.getElementById('loadlistpanel').className = 'url'; }
+			else if (selected === 'file') { document.getElementById('loadlistpanel').className = 'file'; }
 			else { document.getElementById('loadlistpanel').className = ''; }
 		});
-				
-		document.getElementById('load-samples-btn').addEventListener('click', (e) => { MI.Interface.LoadFromLauncher(document.getElementById('load-samples').value); });	
+
+		document.getElementById('load-samples-btn').addEventListener('click', (e) => { MI.Interface.LoadFromLauncher(document.getElementById('load-samples').value);});
 		document.querySelectorAll('#basemap-chooser li').forEach(el => { el.addEventListener('click', (e) => { this.SetBasemap(el.classList[0]); }); });
 		document.getElementById('viz-choices').addEventListener('change', (e) => { MI.Visualization.Set(document.getElementById('viz-choices').value); });
 		document.querySelectorAll('.sources').forEach(el => { el.addEventListener('click', (e) => { e.stopPropagation(); }); });
-	
-		document.getElementById('measure-choices').addEventListener('change', (e) => { 
+
+		document.getElementById('measure-choices').addEventListener('change', (e) => {
 			MI.Atlas.MeasureSort(); MI.Visualization.Set(MI.Visualization.type); });
 		document.getElementById('mapmenu').addEventListener('click', (e) => { document.getElementById('mapmenu-window').classList.remove('closed'); });
 		document.getElementById('mapmenu-window').addEventListener('mouseleave', (e) => { document.getElementById('mapmenu-window').classList.add('closed'); });
 
 		let dropElement = document.getElementById('minfodetail');
-		let dropArea = new jsondrop('minfodetail', { 
-			onEachFile: function(file, start) { MI.Process('manifest', file.data, {id: file.name.hashCode(), url: '', start:MI.supplychains.length === 0}); } 
-		});	
-		document.getElementById('file-input').addEventListener('change', (e) => { if (!MI.LoadManifestFile(e.target.files[0], e.target.value.split( '\\' ).pop())) { 
+		let dropArea = new jsondrop('minfodetail', {
+			onEachFile: function(file, start) { MI.Process('manifest', file.data, {id: file.name.hashCode(), url: '', start:MI.supplychains.length === 0}); }
+		});
+		document.getElementById('file-input').addEventListener('change', (e) => { if (!MI.LoadManifestFile(e.target.files[0], e.target.value.split( '\\' ).pop())) {
 			this.ShakeAlert(document.getElementById('manifestbar'));
 			// @TODO This should shake, but it mysteriously doesn't the function gets called but no animation (in Safari)
 		}});
-		if (MI.options.storyMap) { this.SetBasemap('light'); }
-		
-		['drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop'].forEach(evt => dropElement.addEventListener(evt, (e) => { 
+		if (MI.options.storyMap) {
+			//this.SetBasemap('light');
+		}
+
+		['drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop'].forEach(evt => dropElement.addEventListener(evt, (e) => {
 			e.preventDefault(); e.stopPropagation(); }));
 		['dragover', 'dragenter'].forEach(evt => dropElement.addEventListener(evt, (e) => { dropElement.classList.add('is-dragover'); }));
 		['dragleave', 'dragend', 'drop'].forEach(evt => dropElement.addEventListener(evt, (e) => { dropElement.classList.remove('is-dragover'); }));
 
-		window.onresize = this.ManifestResize;	
+		window.onresize = this.ManifestResize;
 		setTimeout(this.ClearLoader, 150);
 	}
-	
+
 	Storyize() {
 		document.body.classList.add('storymap');
 		MI.Atlas.radius = 20;
-	} 
-	
+		MI.Atlas.styles.point.fontsize = 0.1;
+	}
+
+	//storymap
 	SetupStoryTrigger(selector){
 		let els = document.querySelectorAll(selector);
 		els = Array.from(els);
 		els.forEach(el => {
-  	    	let observer = new IntersectionObserver((entries, observer) => { 
-				entries.forEach(entry => { if (entry.isIntersecting) { 
-					MI.Atlas.PointFocus(entry.target.parentElement.id.split('_')[1], false, true);	
+  	    	let observer = new IntersectionObserver((entries, observer) => {
+				entries.forEach(entry => { if (entry.isIntersecting) {
+					MI.Atlas.PointFocus(entry.target.parentElement.id.split('_')[1], false, false);
 				}});
   	  	  	});
 			observer.observe(el);
@@ -71,7 +193,7 @@ class ManifestUI {
 	}
 
 	// Example usage
-	
+
 	/** Handles header actions **/
 	ShowHeader(id) {
 		let mheader = document.getElementById('mheader-'+id);
@@ -81,28 +203,28 @@ class ManifestUI {
 			mheader = mheader.previousSibling;
 			if (mheader.nodeType === 1 && mheader.classList.contains('mheader')) { offset += mheader.clientHeight; }
 		}
-		document.getElementById('sidepanel').scrollTo(0, document.getElementById('mdetails-'+id).offsetTop + (-1*offset)); 	
+		document.getElementById('sidepanel').scrollTo(0, document.getElementById('mdetails-'+id).offsetTop + (-1*offset));
 		if (MI.Visualization.type === 'textview') {
 			document.getElementById('textview').scrollTo(0, document.getElementById('blob-'+id).offsetTop - ManifestUtilities.RemToPixels(1));
 		}
 	}
 
 	/** Handles the Manifest information and loading menu **/
-	ShowLauncher() {	
+	ShowLauncher() {
 		document.getElementById('minfodetail').classList.toggle('closed');
 		document.getElementById('manifestbar').classList.toggle('open');
-	
+
 		if (!MI.Interface.IsMobile()) {
-			if (document.getElementById('manifestbar').classList.contains('open')) { 
+			if (document.getElementById('manifestbar').classList.contains('open')) {
 				document.body.classList.add('launcher');
-				document.getElementById('sidepanel').style.top = document.getElementById('manifestbar').offsetHeight + ManifestUtilities.RemToPixels(1) + 'px'; 
+				document.getElementById('sidepanel').style.top = document.getElementById('manifestbar').offsetHeight + ManifestUtilities.RemToPixels(1) + 'px';
 			} else { document.body.classList.remove('launcher'); document.getElementById('sidepanel').style.top = '4rem'; }
 		}
 	}
 
 	LoadFromLauncher(value, close=true) {
 		let unloaded = false, loadurl, id, type, idref;
-	
+
 		if (value === 'url') {
 			loadurl = document.getElementById('load-samples-input').value;
 			if (loadurl.toLowerCase().indexOf('https://raw.githubusercontent.com/hock/smapdata/master/data/') >= 0) {
@@ -112,51 +234,51 @@ class ManifestUI {
 			} else {
 				type = 'manifest'; idref = loadurl; id = loadurl.hashCode();
 			}
-				
+
 		} else {
 			let val = value ? value : document.getElementById('load-samples').value;
 			let option = val.split('-');
-			type = option[0];	
+			type = option[0];
 			option = [option.shift(), option.join('-')];
 			id = option[1];
-		
-			if (type === 'smap') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; } 
-			else if	(type === 'manifest') { loadurl = id; id = id.hashCode(); } 
-			else if (type === 'gsheet') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; id = id.hashCode(); }	
+
+			if (type === 'smap') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; }
+			else if	(type === 'manifest') { loadurl = id; id = id.hashCode(); }
+			else if (type === 'gsheet') { loadurl = MI.options.serviceurl + '?type='+type+'&id=' + id; idref = id; id = id.hashCode(); }
 		}
-		
+
 		for (let s in MI.supplychains) { if (MI.supplychains[s].details.id === id) { unloaded = true; }}
-			
+
 		if (!unloaded && id) {
 			if (MI.Interface.IsMobile()) { for (let s in MI.supplychains) { MI.Supplychain.Remove(MI.supplychains[s].details.id); } }
 			fetch(loadurl).then(r => r.json()).then(data => MI.Process(type, data, {id: id, idref: idref, url:loadurl, start:MI.supplychains.length === 0}));
-			//$.getJSON(loadurl, function(d) { });				
+			//$.getJSON(loadurl, function(d) { });
 			if (close) { MI.Interface.ShowLauncher(); }
 		} else { this.ShakeAlert(document.getElementById('manifestbar')); }
+
+
 	}
-	
+
 	/** A simple text match search **/
 	Search(term) {
 		if (term) { document.getElementById('searchbar').value = term; }
 		let s = document.getElementById('searchbar').value.toLowerCase();
-		
+
 		// Only do something if the search has changed.
 		if (s !== MI.Interface.filter.term) {MI.Interface.filter.clear = false; }
 		if (MI.Interface.filter.clear) { MI.Atlas.UpdateCluster(s); return; } else { MI.Interface.filter.term = s;}
-		
+
 		let closedcats = [];
 		document.querySelectorAll('#supplycategories .supplycat input').forEach(el => { if (!el.checked) { closedcats.push(el.value); }});
-	
-		if (!MI.Interface.filter.clear) {		
-			document.querySelectorAll('.mlist > li').forEach(el => { 
+
+		if (!MI.Interface.filter.clear) {
+			document.querySelectorAll('.mlist > li').forEach(el => {
 				let cats = el.querySelectorAll('.cat-link'), catcount = 0;
 				for (let cc of closedcats) { for (let cat of cats) { cat = cat.dataset.cat.toLowerCase(); if (cc === cat) { catcount++; } } }
 
 				let uncat = 'cat-'+el.parentElement.id.split('-')[1]+'-';
-				//console.log(uncat);
-				//console.log(closedcats);
-			
-				if ( catcount >= cats.length || el.textContent.toLowerCase().indexOf(MI.Interface.filter.term) === -1 || closedcats.includes(uncat+'uncategorized') && cats.length === 1 && cats[0].dataset.cat === uncat) { el.style.display = 'none'; } 
+
+				if ( catcount >= cats.length || el.textContent.toLowerCase().indexOf(MI.Interface.filter.term) === -1 || closedcats.includes(uncat+'uncategorized') && cats.length === 1 && cats[0].dataset.cat === uncat) { el.style.display = 'none'; }
 					else { el.style.display = 'list-item'; }
 		    });
 			MI.Interface.filter.clear = true;
@@ -166,45 +288,41 @@ class ManifestUI {
 		for (let i in MI.Atlas.map._layers) {
 			if (typeof MI.Atlas.map._layers[i].feature !== 'undefined') {
 				found = false;
-				
-				let cats = MI.Atlas.map._layers[i].feature.properties.category.split(','), catmatch = false, catcount = 0, 
+
+				let cats = MI.Atlas.map._layers[i].feature.properties.category.split(','), catmatch = false, catcount = 0,
 					catid = MI.Atlas.map._layers[i].feature.properties.scid ? MI.Atlas.map._layers[i].feature.properties.scid : null;
 				for (let cc of closedcats) { for (let cat of cats) { if (cc === 'cat-'+catid+'-'+cat) { catcount++; } } }
-				//console.log(closedcats.includes('uncategorized'));
-				//console.log(cats);
+
 		        if (catcount >= cats.length) { found = false; }
 				else {
 					for (let k of ['title','description','category','placename']) {
 						if (String(MI.Atlas.map._layers[i].feature.properties[k]).toLowerCase().indexOf(s) !== -1) { found = true; }
 					}
 				}
-				
-			
-				console.log('----');
+
 				let uncat = 'cat-'+catid+'-';
-				console.log('cat-'+catid+'-'+cats[0] + ' vs ' + uncat);
-				
+
 				if (closedcats.includes(uncat+'uncategorized') && cats.length === 1 && 'cat-'+catid+'-'+cats[0] === uncat) {
 					found = false;
 				}
 				// TODO Ideally we hide lines if one of the nodes isn't present... for categories this is more complicated and probably requires some changes to the line feature structure to store more information about its connected nodes.
-			
-				if (!(found)) { 
+
+				if (!(found)) {
 					MI.Atlas.map._layers[i].feature.properties.hidden = true;
 					if (MI.Atlas.active_point && MI.Visualization.type === 'map') {
 						if (MI.Atlas.active_point._popup._source._leaflet_id === MI.Atlas.map._layers[i]._leaflet_id) {
-							if (MI.Atlas.active_point._popup._source.feature.properties.clustered.length === 0) { MI.Atlas.active_point.closePopup(); } 
-							else {				
+							if (MI.Atlas.active_point._popup._source.feature.properties.clustered.length === 0) { MI.Atlas.active_point.closePopup(); }
+							else {
 								let id = MI.Atlas.active_point._popup._source.feature.properties.lid;
 								let next = document.getElementById('popup-'+id).nextElementSibling;
 								while (next) { if (next.classList.contains('clusterbox')) break; next = next.nextElementSibling; }
-								if (next) { MI.Atlas.PointFocus(next.id.split('-')[1]);} 
+								if (next) { MI.Atlas.PointFocus(next.id.split('-')[1]);}
 							}
 						}
 					}
 				} else { MI.Atlas.map._layers[i].feature.properties.hidden = false; }
-			} 
-		}	
+			}
+		}
 		// Check Lines
 		for (let i in MI.Atlas.map._layers) {
 			if (typeof MI.Atlas.map._layers[i].feature !== 'undefined') {
@@ -220,15 +338,26 @@ class ManifestUI {
 	}
 
 	ClearSearch() {
-		document.getElementById('searchbar').value = ''; 
+		document.getElementById('searchbar').value = '';
 		MI.Interface.filter = {term: null, clear: true};
 	}
-	
+
 	Link(link, event) {
 		event.preventDefault(); event.stopPropagation();
 		this.LoadFromLauncher(link.replace('manifest://', 'manifest-https://'), false);
 	}
-	
+
+	ImageScroll(lid, n) {
+	    let slideIndex = Number(document.querySelectorAll('#local_'+lid+' div.featuredimages')[0].getAttribute('data-index')) + n;
+		let slides = document.querySelectorAll('#local_'+lid+' div.featuredimages img');
+	    if (slideIndex > slides.length) {slideIndex = 1;}
+	    if (slideIndex < 1) {slideIndex = slides.length; }
+	    for (let i = 0; i < slides.length; i++) {
+	      slides[i].style.display = "none";
+	    }
+	    slides[slideIndex-1].style.display = "block";
+		document.querySelectorAll('#local_'+lid+' div.featuredimages')[0].setAttribute('data-index', slideIndex);
+	}
 	/** Handles the measure sorting interface **/
 	RefreshMeasureList() {
 		const measurechoices = document.getElementById('measure-choices');
@@ -237,86 +366,88 @@ class ManifestUI {
 
 		for (let s in MI.supplychains) { for (let m in MI.supplychains[s].details.measures) { choices[m] = m; }}
 	    while (measurechoices.firstChild) { measurechoices.removeChild(measurechoices.lastChild); }
-	
+
 		for (let c in choices) { let option = document.createElement('option'); option.value = c; option.textContent = c; measurechoices.append(option); }
 		Array.from(document.querySelectorAll('#measure-choices option')).forEach((el) => { if (el.value === previous) { measurechoices.value = previous; } });
 	}
 
 	SetBasemap(tile) {
 		const previoustiles = document.getElementById('basemap-preview').classList[0];
-	
-		document.getElementById('basemap-preview').classList.remove(...document.getElementById('basemap-preview').classList);	
+
+		document.getElementById('basemap-preview').classList.remove(...document.getElementById('basemap-preview').classList);
 		document.getElementById('basemap-preview').classList.add(tile);
-	
+
 		MI.Atlas.map.removeLayer(MI.Atlas.layerdefs[previoustiles]);
-		MI.Atlas.map.addLayer(MI.Atlas.layerdefs[tile]);	
-	
-		document.querySelectorAll('#datalayers input').forEach(el => { 
+		MI.Atlas.map.addLayer(MI.Atlas.layerdefs[tile]);
+		MI.Atlas.baselayer = tile;
+
+		document.querySelectorAll('#datalayers input').forEach(el => {
 			MI.Atlas.map.removeLayer(MI.Atlas.layerdefs[el.value]);
 			if (el.checked) { MI.Atlas.map.addLayer(MI.Atlas.layerdefs[el.value]); }
 		});
 	}
-	
+
 	/** Sets interface to full screen mode **/
 	ToggleFullscreen() {
 		if (document.body.classList.contains('fullscreen')) {
 			document.body.classList.remove('fullscreen');
-			if (document.getElementsByClassName('leaflet-popup').length >= 1 && MI.Atlas.active_point !== null) { 
-				MI.Atlas.map.setView(MI.Atlas.GetOffsetLatlng( MI.Atlas.active_point._popup._latlng));				
-			}
 		} else { document.body.classList.add('fullscreen'); }
+		if (document.getElementsByClassName('leaflet-popup').length >= 1 && MI.Atlas.active_point !== null) {
+			MI.Atlas.map.setView(MI.Atlas.GetOffsetLatlng( MI.Atlas.active_point._popup._source.feature.properties.latlng));
+		}
+		MI.Atlas.homecontrol.setHomeCoordinates();
 		MI.Visualization.Resize();
 	}
-	
+
 	SetDocumentTitle() {
 		let scTitles = [], setTitle = '';
 		for (let sc of MI.supplychains) { scTitles.push(sc.properties.title); }
-		
-		if (scTitles.length === 1 && scTitles[0] === 'Manifest') { setTitle = 'Manifest'; } 
+
+		if (scTitles.length === 1 && scTitles[0] === 'Manifest') { setTitle = 'Manifest'; }
 		else { setTitle = scTitles.length > 0 ? scTitles.join(' + ') + ' - Manifest' : 'Manifest'; }
-		
+
 		document.title = setTitle;
 		document.querySelector('meta[property="og:title"]').setAttribute("content", setTitle);
-		
+
 	}
-	
+
 	ManifestResize() { MI.Visualization.Resize(); }
 
 	ShowLoader() {
 		document.getElementById('loader').style.background = 'rgba(0,0,0,0.8)';
-		document.getElementById('loader').style.display = 'block'; 
+		document.getElementById('loader').style.display = 'block';
 	}
-	
+
 	ClearLoader() {
-		document.getElementById('loader').style.display = 'none'; 
+		document.getElementById('loader').style.display = 'none';
 	}
-	
+
 	ShowMessage(msg) {
 		clearTimeout(this.interval);
 		document.getElementById('messages').classList.remove("closed");
 		document.getElementById('messages').textContent = msg;
 		this.interval = setTimeout((e) => {document.getElementById('messages').textContent = ''; document.getElementById('messages').classList.add("closed");}, 4000);
 	}
-	
+
 	ShakeAlert(element, time=20, coefficient=50){
 	    element.style.transition = '0.1s';
-    
+
 	    let interval = setInterval(() => {
 	    	let randomInt1 = Math.floor((Math.random() * 3) + 1);
 	        let randomInt2 = Math.floor((Math.random() * 3) + 1);
 	        let randomInt3 = Math.floor((Math.random() * 2) + 1);
-        
+
 	        let phase1 = (randomInt1 % 2) === 0 ? '+' : '-';
 	        let phase2 = (randomInt2 % 2) === 0 ? '+' : '-';
 	        let phase3 = (randomInt3 % 2) === 0 ? '+' : '-';
-        
+
 	        let transitionX = ((phase1 + randomInt1) * (coefficient / 10)) + 'px';
-               
-	        element.style.transform = 'translate('+transitionX+',0)';  
+
+	        element.style.transform = 'translate('+transitionX+',0)';
 	    }, time);
-		setTimeout((i=interval, el=element) => { clearInterval(i);  element.style.transform = '';}, 300); 
+		setTimeout((i=interval, el=element) => { clearInterval(i);  element.style.transform = '';}, 300);
 	}
-	
+
 	/* Mobile Functions /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 	Mobilify(id, index) {
 		document.getElementById('sidepanel').classList.add('middle');
@@ -325,12 +456,12 @@ class ManifestUI {
 			if (sidepanel.classList.contains('top')) {
 				if (d === 'd') { document.querySelectorAll('#sidepanel, .view-wrapper').forEach(el => { el.classList.remove('top'); el.classList.add('middle'); }); }
 			} else if (sidepanel.classList.contains('middle')) {
-				if (d === 'u') { document.querySelectorAll('#sidepanel, .view-wrapper').forEach(el => { el.classList.remove('middle'); el.classList.add('top'); }); }			
+				if (d === 'u') { document.querySelectorAll('#sidepanel, .view-wrapper').forEach(el => { el.classList.remove('middle'); el.classList.add('top'); }); }
 				else if (d === 'd') {  document.querySelectorAll('#sidepanel, .view-wrapper').forEach(el => { el.classList.remove('middle'); el.classList.add('bottom'); }); }
 			} else if (sidepanel.classList.contains('bottom')) {
 				if (d === 'u') {  document.querySelectorAll('#sidepanel, .view-wrapper').forEach(el => { el.classList.remove('bottom'); el.classList.add('middle'); }); }
 			}
-			if (MI.Visualization.type !== 'map') { MI.Visualization.Set(MI.Visualization.type); }					
+			if (MI.Visualization.type !== 'map') { MI.Visualization.Set(MI.Visualization.type); }
 		});
 	}
 
@@ -341,9 +472,9 @@ class ManifestUI {
 
 		ele.addEventListener('touchstart', (e) => {  const t = e.touches[0]; swipe_det.sX = t.screenX; swipe_det.sY = t.screenY; });
 		ele.addEventListener('touchmove', (e) => {  e.preventDefault(); const t = e.touches[0]; swipe_det.eX = t.screenX; swipe_det.eY = t.screenY; });
-		ele.addEventListener('touchend', (e) => {  
+		ele.addEventListener('touchend', (e) => {
 			let direc = '';
-		
+
 			if ((((swipe_det.eX - min_x > swipe_det.sX) || (swipe_det.eX + min_x < swipe_det.sX)) && ((swipe_det.eY < swipe_det.sY + max_y) && (swipe_det.sY > swipe_det.eY - max_y) && (swipe_det.eX > 0)))) { direc = (swipe_det.eX > swipe_det.sX) ? 'r' : 'l'; }
 			else if ((((swipe_det.eY - min_y > swipe_det.sY) || (swipe_det.eY + min_y < swipe_det.sY)) && ((swipe_det.eX < swipe_det.sX + max_x) && (swipe_det.sX > swipe_det.eX - max_x) && (swipe_det.eY > 0)))) { direc = (swipe_det.eY > swipe_det.sY) ? 'd' : 'u'; }
 
@@ -353,5 +484,5 @@ class ManifestUI {
 	}
 
 	IsMobile() { return window.innerWidth > 920 ? false : true; }
-	
+
 }
