@@ -180,8 +180,6 @@ class ManifestAtlas {
 
 	/** Render lines by setting up a GeoJSON feature for display **/
 	RenderLine(feature, layer) {
-		//console.log('yea', MI.supplychains[0].raw.nodes)
-
 
 		let propertiesList = `
 	<div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
