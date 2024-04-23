@@ -51,8 +51,8 @@ class Manifest {
 		return d;
 	}
 
-	/** Format a google sheet file so Manifest can understand it */
-	// dev
+
+
 	FormatMANIFEST(manifest, options) {
 		let d = {
 			type: 'FeatureCollection',
@@ -68,99 +68,219 @@ class Manifest {
 			},
 			properties: {
 				title: manifest.summary.name,
-				description: this.Util.markdowner.makeHtml(manifest.summary.description)
+				description: MI.Util.markdowner.makeHtml(manifest.summary.description)
 			},
 			features: [],
+			stops: [],
+			hops: []
 		};
 
-		let nodeIndexMap = {};
+		if (d.details.url === '#manifest-') {
+			d.details.url = '#';
+		}
 
-		manifest.nodes.forEach((node) => {
-			let nodeFeature = {
+		for (let n of manifest.nodes) {
+			let ft = {
 				type: 'Feature',
 				properties: {
-					index: node.overview.index,
+					index: n.overview.index,
 					scid: options.id,
-					title: node.overview.name,
-					description: this.Util.markdowner.makeHtml(node.overview.description),
-					placename: node.location.address,
-					category: node.attributes.category || '',
-					images: node.attributes.image.map(s => s.URL).join(','),
-					icon: node.attributes.icon || '',
-					color: node.attributes.color || '',
-					measures: node.measures.measures,
-					sources: node.attributes.sources.map(s => s.URL).join(','),
-					notes: this.Util.markdowner.makeHtml(node.notes.markdown),
+					title: n.overview.name,
+					description: MI.Util.markdowner.makeHtml(n.overview.description),
+					placename: n.location.address,
+					category: n.attributes.category ? n.attributes.category : '',
+					images: n.attributes.image.map(function(s) { return s.URL; }).join(','),
+					icon: n.attributes.icon ? n.attributes.icon : '',
+					color: n.attributes.color ? n.attributes.color : '',
+					measures: n.measures.measures,
+					sources: n.attributes.sources.map(function(s) { return s.URL; }).join(','),
+					notes: MI.Util.markdowner.makeHtml(n.notes.markdown)
 				},
 				geometry: {
-					type: 'Point',
-					coordinates: [
-						parseFloat(node.location.geocode.split(',')[1]),
-						parseFloat(node.location.geocode.split(',')[0])
+					type:'Point',
+					coordinates:[
+						n.location.geocode.split(',')[1] ? n.location.geocode.split(',')[1] : '',
+						n.location.geocode.split(',')[0] ? n.location.geocode.split(',')[0] : ''
 					]
 				}
 			};
 
-			d.features.push(nodeFeature);
-			nodeIndexMap[node.overview.index] = nodeFeature;
-		});
+			d.stops.push({
+				local_stop_id: Number(n.overview.index),
+				id: Number(n.overview.index),
+				attributes: ft.properties,
+				geometry: ft.geometry
+			});
 
-		manifest.nodes.forEach(node => {
-			let sourceNodeFeature = nodeIndexMap[node.overview.index];
-
-			if (Array.isArray(node.attributes.destinationindex)) {
-				node.attributes.destinationindex.forEach(destination => {
-					if (typeof destination === 'object' && destination.index !== undefined) {
-						let targetNodeFeature = nodeIndexMap[destination.index];
-						if (sourceNodeFeature && targetNodeFeature) {
-							let hopFeature = {
-								type: 'Feature',
-								properties: {
-									title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
-									from_stop_id: node.overview.index,
-									to_stop_id: destination.index,
-									distance: destination.distance || 'Unknown',
-									transportation: destination.transportation || 'Unknown',
-									extraInfo: destination.extraInfo || 'None',
-								},
-								geometry: {
-									type: "LineString",
-									coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
-								}
-							};
-							d.features.push(hopFeature);
-						}
-					}
+			if (Array.isArray(n.attributes.destinationindex)) {
+				n.attributes.destinationindex.forEach(di => {
+					d.hops.push({
+						from_stop_id: Number(n.overview.index),
+						to_stop_id: Number(di.index),
+						attributes: { ...ft.properties, ...di }
+					});
 				});
-			} else if (typeof node.attributes.destinationindex === 'string') {
-				let destinations = node.attributes.destinationindex.split(',');
-				destinations.forEach(destinationIndex => {
-					let index = parseInt(destinationIndex.trim(), 10);
-					let targetNodeFeature = nodeIndexMap[index];
-					if (!isNaN(index) && targetNodeFeature) {
-						let hopFeature = {
-							type: 'Feature',
-							properties: {
-								title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
-								from_stop_id: node.overview.index,
-								to_stop_id: index,
-								distance: 'Unknown',
-								transportation: 'Unknown',
-								extraInfo: 'None',
-							},
-							geometry: {
-								type: "LineString",
-								coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
-							}
-						};
-						d.features.push(hopFeature);
-					}
-				});
+			} else if (n.attributes.destinationindex !== '') {
+				let hops = n.attributes.destinationindex.split(',');
+				for (let h of hops) {
+					d.hops.push({
+						from_stop_id: Number(n.overview.index),
+						to_stop_id: Number(h),
+						attributes: ft.properties
+					});
+				}
 			}
-		});
 
+			d.features.push(ft);
+		}
+
+		for (let h of d.hops) {
+			h.from = d.features[h.from_stop_id - 1];
+			h.to = d.features[h.to_stop_id - 1];
+			let ft = {
+				type: 'Feature',
+				properties: {
+					title: h.from.properties.title + '|' + h.to.properties.title,
+					category: [...new Set([...h.from.properties.category.split(','), ...h.to.properties.category.split(',')])].join(','),
+					connections: {
+						from: {
+							scid: h.from.properties.scid,
+							index: h.from.properties.index
+						},
+						to: {
+							scid: h.to.properties.scid,
+							index: h.to.properties.index
+						}
+					},
+					// Include the details from destinationindex directly in the hops' properties
+					distance: h.attributes.distance,
+					transportation: h.attributes.transportation,
+					extraInfo: h.attributes.extraInfo
+				},
+				geometry: {
+					type:"Line",
+					coordinates:[h.from.geometry.coordinates, h.to.geometry.coordinates]
+				}
+			};
+			d.features.push(ft);
+		}
+		console.log('d:',d)
+		console.log('Final hops details:', d.hops);
 		return d;
 	}
+
+
+	/** Format a google sheet file so Manifest can understand it */
+	// dev
+	// FormatMANIFEST(manifest, options) {
+	// 	let d = {
+	// 		type: 'FeatureCollection',
+	// 		mtype: 'manifest',
+	// 		raw: manifest,
+	// 		mapper: {},
+	// 		options: options,
+	// 		details: {
+	// 			id: options.id,
+	// 			url: '#manifest-' + options.url,
+	// 			layers: [],
+	// 			measures: []
+	// 		},
+	// 		properties: {
+	// 			title: manifest.summary.name,
+	// 			description: this.Util.markdowner.makeHtml(manifest.summary.description)
+	// 		},
+	// 		features: [],
+	// 	};
+	// 	//console.log(MI.supplychains[0].graph.nodes)
+	//
+	// 	let nodeIndexMap = {};
+	//
+	// 	manifest.nodes.forEach((node) => {
+	// 		let nodeFeature = {
+	// 			type: 'Feature',
+	// 			properties: {
+	// 				index: node.overview.index,
+	// 				scid: options.id,
+	// 				title: node.overview.name,
+	// 				description: this.Util.markdowner.makeHtml(node.overview.description),
+	// 				placename: node.location.address,
+	// 				category: node.attributes.category || '',
+	// 				images: node.attributes.image.map(s => s.URL).join(','),
+	// 				icon: node.attributes.icon || '',
+	// 				color: node.attributes.color || '',
+	// 				measures: node.measures.measures,
+	// 				sources: node.attributes.sources.map(s => s.URL).join(','),
+	// 				notes: this.Util.markdowner.makeHtml(node.notes.markdown),
+	// 			},
+	// 			geometry: {
+	// 				type: 'Point',
+	// 				coordinates: [
+	// 					parseFloat(node.location.geocode.split(',')[1]),
+	// 					parseFloat(node.location.geocode.split(',')[0])
+	// 				]
+	// 			}
+	// 		};
+	//
+	// 		d.features.push(nodeFeature);
+	// 		nodeIndexMap[node.overview.index] = nodeFeature;
+	// 	});
+	//
+	// 	manifest.nodes.forEach(node => {
+	// 		let sourceNodeFeature = nodeIndexMap[node.overview.index];
+	//
+	// 		if (Array.isArray(node.attributes.destinationindex)) {
+	// 			node.attributes.destinationindex.forEach(destination => {
+	// 				if (typeof destination === 'object' && destination.index !== undefined) {
+	// 					let targetNodeFeature = nodeIndexMap[destination.index];
+	// 					if (sourceNodeFeature && targetNodeFeature) {
+	// 						let hopFeature = {
+	// 							type: 'Feature',
+	// 							properties: {
+	// 								title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
+	// 								from_stop_id: node.overview.index,
+	// 								to_stop_id: destination.index,
+	// 								distance: destination.distance || 'Unknown',
+	// 								transportation: destination.transportation || 'Unknown',
+	// 								extraInfo: destination.extraInfo || 'None',
+	// 							},
+	// 							geometry: {
+	// 								type: "LineString",
+	// 								coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
+	// 							}
+	// 						};
+	// 						d.features.push(hopFeature);
+	// 					}
+	// 				}
+	// 			});
+	// 		} else if (typeof node.attributes.destinationindex === 'string') {
+	// 			let destinations = node.attributes.destinationindex.split(',');
+	// 			destinations.forEach(destinationIndex => {
+	// 				let index = parseInt(destinationIndex.trim(), 10);
+	// 				let targetNodeFeature = nodeIndexMap[index];
+	// 				if (!isNaN(index) && targetNodeFeature) {
+	// 					let hopFeature = {
+	// 						type: 'Feature',
+	// 						properties: {
+	// 							title: `${sourceNodeFeature.properties.title} to ${targetNodeFeature.properties.title}`,
+	// 							from_stop_id: node.overview.index,
+	// 							to_stop_id: index,
+	// 							distance: 'Unknown',
+	// 							transportation: 'Unknown',
+	// 							extraInfo: 'None',
+	// 						},
+	// 						geometry: {
+	// 							type: "LineString",
+	// 							coordinates: [sourceNodeFeature.geometry.coordinates, targetNodeFeature.geometry.coordinates]
+	// 						}
+	// 					};
+	// 					d.features.push(hopFeature);
+	// 				}
+	// 			});
+	// 		}
+	// 	});
+	//
+	// 	return d;
+	// }
 
 
 
@@ -210,80 +330,53 @@ class Manifest {
 		return d;
 	}
 
-	/** Setup the graph relationships for Manifest files **/
 	ManifestGraph(d, options) {
 		let sc = null;
 		for (let s in MI.supplychains) {
 			if (MI.supplychains[s].details.id === options.id) {
-				MI.supplychains[s].graph = {nodes: [], links: []};
+				MI.supplychains[s].graph = {nodes:[], links:[]};
 				sc = MI.supplychains[s];
 			}
 		}
 
-		// Process stops
 		if (typeof d.supplychain.stops !== 'undefined') {
 			for (let i = 0; i < d.supplychain.stops.length; ++i) {
-				let stop = d.supplychain.stops[i];
-				let title = stop.attributes.title || 'Node';
-				let place = stop.attributes.placename || stop.attributes.address || '';
+
+				let title = (d.supplychain.stops[i].attributes.title) ? d.supplychain.stops[i].attributes.title : 'Node';
+				let place = (d.supplychain.stops[i].attributes.placename) ? d.supplychain.stops[i].attributes.placename :
+					((d.supplychain.stops[i].attributes.address) ? d.supplychain.stops[i].attributes.address : '');
 				let loc = place.split(', ').pop();
-				let localStopId = Number(stop.local_stop_id - 1);
-				let newNode = {
-					id: options.id + '-' + localStopId,
-					name: title,
-					loc: loc,
-					place: place,
-					group: options.id,
-					links: [],
-					ref: sc.mapper[localStopId],
-					color: options.style.color,
-					fillColor: options.style.fillColor
-				};
-				sc.graph.nodes[stop.local_stop_id - 1] = newNode;
+				let localstopid = Number(d.supplychain.stops[i].local_stop_id-1);
+				let newNode = { id: options.id+'-'+localstopid, name: title, loc: loc, place: place, group: options.id, links: [], ref: sc.mapper[localstopid],
+					color: options.style.color, fillColor: options.style.fillColor };
+				sc.graph.nodes[d.supplychain.stops[i].local_stop_id - 1] = newNode;
 			}
 		}
 
-		// Process hops considering the new format
 		if (typeof d.supplychain.hops !== 'undefined' && d.supplychain.hops.length > 0) {
 			sc.graph.type = 'directed';
 			for (let j = 0; j < d.supplychain.hops.length; ++j) {
-				let hop = d.supplychain.hops[j];
-				if (Array.isArray(hop.attributes.destinationindex)) {
-					// Handle the new structure
-					hop.attributes.destinationindex.forEach(destination => {
-						if (destination.index !== undefined) {
-							let sourceId = hop.overview.index - 1; // Adjusted for zero-based index
-							let targetId = destination.index - 1; // Adjusted for zero-based index
-							sc.graph.nodes[targetId].links.push(sc.graph.nodes[sourceId].loc);
-							let newLink = {
-								source: sourceId,
-								target: targetId,
-								color: options.style.color,
-								fillColor: options.style.fillColor,
-								// Add any new attributes if needed
-							};
-							sc.graph.links.push(newLink);
-						}
-					});
-				}
+				sc.graph.nodes[d.supplychain.hops[j].to_stop_id - 1].links.push(sc.graph.nodes[d.supplychain.hops[j].from_stop_id - 1].loc);
+				let newLink = { source: Number(d.supplychain.hops[j].from_stop_id - 1), target: Number(d.supplychain.hops[j].to_stop_id - 1),
+					color: options.style.color, fillColor: options.style.fillColor};
+				sc.graph.links.push(newLink);
+
 			}
-		} else {
-			sc.graph.type = 'undirected';
+			for (let k = 0; k < d.supplychain.hops.length; ++k) {
+				sc.graph.nodes[d.supplychain.hops[k].from_stop_id - 1].links.push(sc.graph.nodes[d.supplychain.hops[k].to_stop_id - 1].loc);
+			}
+		} else { sc.graph.type = 'undirected'; }
+
+		for (let l = 0; l < sc.graph.links.length; l++) {
+			sc.graph.links[l].source = String(options.id)+'-'+(sc.graph.links[l].source);
+			sc.graph.links[l].target = String(options.id)+'-'+(sc.graph.links[l].target);
 		}
-
-		// Update the source and target IDs in links to include the supply chain ID
-		sc.graph.links.forEach(link => {
-			link.source = `${options.id}-${link.source}`;
-			link.target = `${options.id}-${link.target}`;
-		});
-
-		// Ensure node IDs are correctly formatted
-		sc.graph.nodes.forEach(node => {
-			if (node !== undefined) {
-				let idParts = node.id.split('-');
-				node.id = `${idParts[0]}-${Number(idParts[1])}`;
+		for (let l = 0; l < sc.graph.nodes.length; l++) {
+			if (typeof sc.graph.nodes[l] !== 'undefined') {
+				let id = sc.graph.nodes[l].id.split('-');
+				sc.graph.nodes[l].id = id[0]+'-'+(Number(id[1]));
 			}
-		});
+		}
 	}
 
 
